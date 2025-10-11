@@ -15,7 +15,10 @@ import (
 
 func main() {
 	clock := api.RealClock{}
-	services := app.NewInMemoryServices(clock)
+	services, err := app.NewServicesFromEnv(clock)
+	if err != nil {
+		log.Fatalf("api: failed to configure services: %v", err)
+	}
 
 	srv := &http.Server{
 		Addr:         ":" + getEnv("PORT", "8080"),

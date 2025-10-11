@@ -14,7 +14,10 @@ import (
 )
 
 func main() {
-	services := app.NewInMemoryServices(api.RealClock{})
+	services, err := app.NewServicesFromEnv(api.RealClock{})
+	if err != nil {
+		panic(err)
+	}
 	handler := api.NewServer(services).Handler()
 	lambdaAdapter := adapter.NewV2(handler)
 
