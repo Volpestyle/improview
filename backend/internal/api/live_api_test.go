@@ -3,6 +3,7 @@ package api_test
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -79,9 +80,13 @@ func decodeBody(t *testing.T, resp *http.Response, target any) {
 		return
 	}
 
-	decoder := json.NewDecoder(resp.Body)
-	if err := decoder.Decode(target); err != nil {
-		t.Fatalf("decode response: %v", err)
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read response body: %v", err)
+	}
+
+	if err := json.Unmarshal(bodyBytes, target); err != nil {
+		t.Fatalf("decode response: %v (body: %s)", err, string(bodyBytes))
 	}
 }
 
