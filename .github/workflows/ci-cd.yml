@@ -20,6 +20,9 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -27,6 +30,9 @@ jobs:
         run: npm install -g pnpm@9 aws-cdk@2
       - name: Install dependencies
         run: pnpm install --dir infra/cdk
+      - name: Backend tests
+        run: go test ./...
+        working-directory: backend
       - name: Lint
         run: pnpm --dir infra/cdk run --if-present lint
       - name: Unit tests
