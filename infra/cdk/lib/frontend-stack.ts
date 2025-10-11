@@ -28,11 +28,13 @@ export class FrontendStack extends Stack {
     const originAccessIdentity = new cloudfront.OriginAccessIdentity(this, 'SiteOAI');
     siteBucket.grantRead(originAccessIdentity.grantPrincipal);
 
+    const s3Origin = origins.S3BucketOrigin.withOriginAccessIdentity(siteBucket, {
+      originAccessIdentity,
+    });
+
     const distribution = new cloudfront.Distribution(this, 'SiteDistribution', {
       defaultBehavior: {
-        origin: new origins.S3BucketOrigin(siteBucket, {
-          originAccessIdentity,
-        }),
+        origin: s3Origin,
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
       },
     });
