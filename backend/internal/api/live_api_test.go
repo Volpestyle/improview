@@ -11,11 +11,26 @@ import (
 	"time"
 
 	"improview/backend/internal/domain"
+	"improview/backend/internal/jsonfmt"
 )
 
 type liveSuite struct {
 	baseURL string
 	client  *http.Client
+}
+
+const smokeLogMaxBodyBytes = jsonfmt.DefaultLogLimit
+
+func smokeDebugEnabled() bool {
+	return strings.TrimSpace(os.Getenv("CI_SMOKE_DEBUG")) != ""
+}
+
+func logSmoke(t *testing.T, format string, args ...any) {
+	if !smokeDebugEnabled() {
+		return
+	}
+	t.Helper()
+	t.Logf(format, args...)
 }
 
 func newLiveSuite(t *testing.T) *liveSuite {
@@ -42,6 +57,8 @@ func (s *liveSuite) get(t *testing.T, path string, target any) *http.Response {
 		t.Fatalf("create request: %v", err)
 	}
 
+	logSmoke(t, "[GET %s] sending request", path)
+
 	resp, err := s.client.Do(req)
 	if err != nil {
 		t.Fatalf("perform GET %s: %v", path, err)
@@ -65,6 +82,8 @@ func (s *liveSuite) post(t *testing.T, path string, payload any, target any) *ht
 	}
 	req.Header.Set("Content-Type", "application/json")
 
+	logSmoke(t, "[POST %s] payload=%s", path, jsonfmt.FormatForLog(body, smokeLogMaxBodyBytes))
+
 	resp, err := s.client.Do(req)
 	if err != nil {
 		t.Fatalf("perform POST %s: %v", path, err)
@@ -78,13 +97,25 @@ func decodeBody(t *testing.T, resp *http.Response, target any) {
 	t.Helper()
 
 	defer resp.Body.Close()
-	if target == nil {
-		return
-	}
-
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatalf("read response body: %v", err)
+	}
+
+	if smokeDebugEnabled() {
+		method := "UNKNOWN"
+		path := ""
+		if resp.Request != nil {
+			method = resp.Request.Method
+			if resp.Request.URL != nil {
+				path = resp.Request.URL.RequestURI()
+			}
+		}
+		logSmoke(t, "[RESP %s %s] status=%d body=%s", method, path, resp.StatusCode, jsonfmt.FormatForLog(bodyBytes, smokeLogMaxBodyBytes))
+	}
+
+	if target == nil {
+		return
 	}
 
 	if err := json.Unmarshal(bodyBytes, target); err != nil {

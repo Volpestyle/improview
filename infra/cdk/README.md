@@ -48,11 +48,13 @@ The stack names include the environment, so you can deploy multiple environments
 Use the helper script to set or rotate the LLM provider secret:
 
 ```bash
-pnpm exec --dir infra/cdk node scripts/set-provider-secret.js \
+pnpm --dir infra/cdk exec node scripts/set-provider-secret.js \
   --env dev \
   --region us-east-1 \
   --openai "$OPENAI_API_KEY" \
   --grok "$GROK_API_KEY"
 ```
+
+Install the dependencies first (`pnpm --dir infra/cdk install`) so the script can load the AWS SDK helper.
 
 You can rely on environment variables (`OPENAI_API_KEY`, `GROK_API_KEY`, `AWS_REGION`) instead of CLI flags if you prefer. The script merges with any existing secret payload and stamps an `updatedAt` timestamp.

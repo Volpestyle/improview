@@ -7,6 +7,16 @@ node_modules/
 pnpm-debug.log
 npm-debug.log
 
+# Local environment files
+.env
+.env.*
+backend/.env
+backend/.env.*
+backend/tmp/
+
+# Local Git worktrees
+improview-*/
+
 # Frontend build outputs
 dist/
 apps/**/dist/
