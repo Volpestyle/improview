@@ -16,9 +16,9 @@ import (
 func main() {
 	services := app.NewInMemoryServices(api.RealClock{})
 	handler := api.NewServer(services).Handler()
-	lambdaAdapter := adapter.New(handler)
+	lambdaAdapter := adapter.NewV2(handler)
 
-	lambda.Start(func(ctx context.Context, event events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	lambda.Start(func(ctx context.Context, event events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 		return lambdaAdapter.ProxyWithContext(ctx, event)
 	})
 }
