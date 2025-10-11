@@ -30,7 +30,7 @@ export class FrontendStack extends Stack {
 
     const distribution = new cloudfront.Distribution(this, 'SiteDistribution', {
       defaultBehavior: {
-        origin: new origins.S3Origin(siteBucket, {
+        origin: new origins.S3BucketOrigin(siteBucket, {
           originAccessIdentity,
         }),
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
