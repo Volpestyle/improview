@@ -1,2 +1,15 @@
 # Build caches
 backend/.gocache/
+
+# Node/PNPM artifacts
+node_modules/
+**/node_modules/
+pnpm-debug.log
+npm-debug.log
+
+# Frontend build outputs
+dist/
+apps/**/dist/
+
+# CDK synthesized assets
+infra/cdk/cdk.out/
