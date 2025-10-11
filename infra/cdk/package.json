@@ -11,9 +11,9 @@
     "diff": "cdk diff"
   },
   "devDependencies": {
-    "@aws-cdk/aws-apigatewayv2-alpha": "^2.139.0-alpha.0",
-    "@aws-cdk/aws-apigatewayv2-integrations-alpha": "^2.139.0-alpha.0",
-    "aws-cdk-lib": "^2.139.0",
+    "@aws-cdk/aws-apigatewayv2-alpha": "^2.114.1-alpha.0",
+    "@aws-cdk/aws-apigatewayv2-integrations-alpha": "^2.114.1-alpha.0",
+    "aws-cdk-lib": "^2.114.1",
     "constructs": "^10.3.0",
     "source-map-support": "^0.5.21",
     "ts-node": "^10.9.2",
