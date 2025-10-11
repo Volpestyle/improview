@@ -114,7 +114,7 @@ jobs:
         run: aws cloudfront create-invalidation --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" --paths "/*"
       - name: Deploy serverless services
         if: steps.deployment_guard.outputs.should_deploy == 'true'
-        run: pnpm run --if-present deploy:services
+        run: pnpm --dir infra/cdk run --if-present deploy:services
       - name: Skip deployment (missing AWS credentials)
         if: steps.deployment_guard.outputs.should_deploy != 'true'
         run: echo "AWS credentials not configured; skipping deploy."
