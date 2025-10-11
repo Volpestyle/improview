@@ -1,0 +1,102 @@
+name: CI/CD
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Lint, test, and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Lint
+        run: pnpm run --if-present lint
+      - name: Unit tests
+        run: pnpm run --if-present test
+      - name: Build
+        run: pnpm run --if-present build
+      - name: Upload build artifact
+        if: success() && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: |
+            dist
+            apps/web/dist
+          if-no-files-found: ignore
+
+  deploy:
+    name: Deploy to AWS
+    needs: quality
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && (secrets.AWS_ROLE_TO_ASSUME != '' || (secrets.AWS_ACCESS_KEY_ID != '' && secrets.AWS_SECRET_ACCESS_KEY != ''))
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: production
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      S3_BUCKET: ${{ vars.AWS_S3_BUCKET }}
+      CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.AWS_CLOUDFRONT_DISTRIBUTION_ID }}
+      FRONTEND_BUILD_DIR: ${{ vars.FRONTEND_BUILD_DIR }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build application
+        run: pnpm run --if-present build
+      - name: Configure AWS credentials via OIDC
+        if: secrets.AWS_ROLE_TO_ASSUME != ''
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION != '' && env.AWS_REGION || 'us-east-1' }}
+      - name: Configure AWS credentials via static keys
+        if: secrets.AWS_ROLE_TO_ASSUME == ''
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION != '' && env.AWS_REGION || 'us-east-1' }}
+      - name: Sync static assets to S3
+        if: env.S3_BUCKET != ''
+        run: |
+          build_dir="${FRONTEND_BUILD_DIR:-apps/web/dist}"
+          if [ ! -d "$build_dir" ] && [ -d dist ]; then
+            build_dir=dist
+          fi
+          aws s3 sync "$build_dir" "s3://$S3_BUCKET" --delete
+      - name: Invalidate CloudFront cache
+        if: env.CLOUDFRONT_DISTRIBUTION_ID != ''
+        run: aws cloudfront create-invalidation --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" --paths "/*"
+      - name: Deploy serverless services
+        run: pnpm run --if-present deploy:services
