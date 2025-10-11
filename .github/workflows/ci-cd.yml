@@ -66,6 +66,7 @@ jobs:
       CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.AWS_CLOUDFRONT_DISTRIBUTION_ID }}
       FRONTEND_BUILD_DIR: ${{ vars.FRONTEND_BUILD_DIR }}
       IMPROVIEW_ENV: ${{ vars.IMPROVIEW_ENV }}
+      IMPROVIEW_LIVE_BASE_URL: ${{ vars.IMPROVIEW_LIVE_BASE_URL }}
       AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -122,6 +123,14 @@ jobs:
       - name: Deploy serverless services
         if: steps.deployment_guard.outputs.should_deploy == 'true'
         run: pnpm --dir infra/cdk run deploy:services
+      - uses: actions/setup-go@v5
+        if: steps.deployment_guard.outputs.should_deploy == 'true' && env.IMPROVIEW_LIVE_BASE_URL != ''
+        with:
+          go-version-file: backend/go.mod
+      - name: Run live API smoke tests
+        if: steps.deployment_guard.outputs.should_deploy == 'true' && env.IMPROVIEW_LIVE_BASE_URL != ''
+        run: go test ./internal/api -run Live -v
+        working-directory: backend
       - name: Skip deployment (missing AWS credentials)
         if: steps.deployment_guard.outputs.should_deploy != 'true'
         run: echo "AWS credentials not configured; skipping deploy."
