@@ -52,7 +52,7 @@ export class BackendStack extends Stack {
     });
 
     const apiHandler = new lambda.Function(this, 'ApiHandler', {
-      runtime: lambda.Runtime.GO_1_X,
+      runtime: lambda.Runtime.PROVIDED_AL2023,
       architecture: lambda.Architecture.ARM_64,
       handler: 'bootstrap',
       timeout: Duration.seconds(15),
