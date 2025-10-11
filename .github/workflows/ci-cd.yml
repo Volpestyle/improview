@@ -23,18 +23,21 @@ jobs:
       - uses: pnpm/action-setup@v3
         with:
           version: 9
+          run_install: false
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: pnpm
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Install lockfile
+        run: pnpm install --lockfile-only --dir infra/cdk
+      - name: Install workspace
+        run: pnpm install --dir infra/cdk
       - name: Lint
         run: pnpm run --if-present lint
       - name: Unit tests
         run: pnpm run --if-present test
       - name: Build
-        run: pnpm run --if-present build
+        run: pnpm --dir infra/cdk run build
       - name: Upload build artifact
         if: success() && github.event_name == 'pull_request'
         uses: actions/upload-artifact@v4
@@ -81,17 +84,21 @@ jobs:
         if: steps.deployment_guard.outputs.should_deploy == 'true'
         with:
           version: 9
+          run_install: false
       - uses: actions/setup-node@v4
         if: steps.deployment_guard.outputs.should_deploy == 'true'
         with:
           node-version: 20
           cache: pnpm
-      - name: Install dependencies
+      - name: Install lockfile
         if: steps.deployment_guard.outputs.should_deploy == 'true'
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --lockfile-only --dir infra/cdk
+      - name: Install workspace
+        if: steps.deployment_guard.outputs.should_deploy == 'true'
+        run: pnpm install --dir infra/cdk
       - name: Build application
         if: steps.deployment_guard.outputs.should_deploy == 'true'
-        run: pnpm run --if-present build
+        run: pnpm --dir infra/cdk run build
       - name: Configure AWS credentials via OIDC
         if: steps.deployment_guard.outputs.should_deploy == 'true' && env.AWS_ROLE_TO_ASSUME != ''
         uses: aws-actions/configure-aws-credentials@v4
