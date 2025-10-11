@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"improview/backend/internal/domain"
 )
 
 type liveSuite struct {
@@ -127,52 +129,132 @@ func TestLiveVersion(t *testing.T) {
 func TestLiveGenerate(t *testing.T) {
 	suite := newLiveSuite(t)
 
+	problem := generateProblem(t, suite)
+
+	if strings.TrimSpace(problem.ProblemID) == "" {
+		t.Fatalf("expected problem_id in response")
+	}
+	if strings.TrimSpace(problem.Pack.Problem.Title) == "" {
+		t.Fatalf("expected problem title in pack")
+	}
+	if len(problem.Pack.Tests.Public) == 0 || len(problem.Pack.Tests.Hidden) == 0 {
+		t.Fatalf("expected both public and hidden tests")
+	}
+	if len(problem.Pack.Solutions) == 0 {
+		t.Fatalf("expected at least one solution outline")
+	}
+	if strings.TrimSpace(problem.Pack.Hint) == "" {
+		t.Fatalf("expected hint in problem pack")
+	}
+}
+
+func TestLiveAttemptLifecycle(t *testing.T) {
+	suite := newLiveSuite(t)
+
+	problem := generateProblem(t, suite)
+
+	var attemptResp struct {
+		Attempt domain.Attempt `json:"attempt"`
+	}
+
+	resp := suite.post(t, "/api/attempt", map[string]string{
+		"problem_id": problem.ProblemID,
+		"lang":       "javascript",
+	}, &attemptResp)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 from attempt creation, got %d", resp.StatusCode)
+	}
+
+	attemptID := strings.TrimSpace(attemptResp.Attempt.ID)
+	if attemptID == "" {
+		t.Fatalf("expected attempt id in response")
+	}
+
+	var runSummary struct {
+		Summary domain.RunSummary `json:"summary"`
+	}
+	runResp := suite.post(t, "/api/run-tests", map[string]string{
+		"attempt_id": attemptID,
+		"code":       "function solution(){ return 42; }",
+		"which":      "public",
+	}, &runSummary)
+	if runResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 from run-tests, got %d", runResp.StatusCode)
+	}
+	if len(runSummary.Summary.Results) == 0 {
+		t.Fatalf("expected run summary results")
+	}
+
+	var submitSummary struct {
+		Summary domain.SubmissionSummary `json:"summary"`
+	}
+	submitResp := suite.post(t, "/api/submit", map[string]string{
+		"attempt_id": attemptID,
+		"code":       "function solution(){ return 42; }",
+	}, &submitSummary)
+	if submitResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 from submit, got %d", submitResp.StatusCode)
+	}
+	if !submitSummary.Summary.Passed {
+		t.Fatalf("expected submission to pass")
+	}
+
+	var attemptDetail struct {
+		Attempt domain.Attempt     `json:"attempt"`
+		Runs    []domain.RunResult `json:"runs"`
+	}
+	getResp := suite.get(t, "/api/attempt/"+attemptID, &attemptDetail)
+	if getResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 from get attempt, got %d", getResp.StatusCode)
+	}
+	if len(attemptDetail.Runs) == 0 {
+		t.Fatalf("expected recorded runs in attempt")
+	}
+	if attemptDetail.Attempt.ProblemID != problem.ProblemID {
+		t.Fatalf("expected problem id %q, got %q", problem.ProblemID, attemptDetail.Attempt.ProblemID)
+	}
+
+	var pack domain.ProblemPack
+	problemResp := suite.get(t, "/api/problem/"+problem.ProblemID, &pack)
+	if problemResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 from get problem, got %d", problemResp.StatusCode)
+	}
+	if strings.TrimSpace(pack.Problem.Title) == "" {
+		t.Fatalf("expected stored problem title")
+	}
+	if len(pack.Tests.Public) == 0 || len(pack.Tests.Hidden) == 0 {
+		t.Fatalf("expected stored problem tests")
+	}
+
+	var errEnvelope struct {
+		Error   string `json:"error"`
+		Message string `json:"message"`
+	}
+	errResp := suite.get(t, "/api/attempt/does-not-exist", &errEnvelope)
+	if errResp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404 for missing attempt, got %d", errResp.StatusCode)
+	}
+	if errEnvelope.Error != "not_found" {
+		t.Fatalf("expected not_found error code, got %q", errEnvelope.Error)
+	}
+}
+
+func generateProblem(t *testing.T, suite *liveSuite) *struct {
+	ProblemID string             `json:"problem_id"`
+	Pack      domain.ProblemPack `json:"pack"`
+} {
 	var payload struct {
-		ProblemID string `json:"problem_id"`
-		Pack      struct {
-			Problem struct {
-				Title string `json:"title"`
-			} `json:"problem"`
-		} `json:"pack"`
+		ProblemID string             `json:"problem_id"`
+		Pack      domain.ProblemPack `json:"pack"`
 	}
 
 	resp := suite.post(t, "/api/generate", map[string]string{
 		"category":   "arrays",
 		"difficulty": "easy",
 	}, &payload)
-
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200 from generate, got %d", resp.StatusCode)
 	}
 
-	if strings.TrimSpace(payload.ProblemID) == "" {
-		t.Fatalf("expected problem_id in response")
-	}
-
-	if strings.TrimSpace(payload.Pack.Problem.Title) == "" {
-		t.Fatalf("expected problem title in pack")
-	}
-}
-
-func TestLiveCreateAttempt(t *testing.T) {
-	suite := newLiveSuite(t)
-
-	var payload struct {
-		Attempt struct {
-			ID string `json:"id"`
-		} `json:"attempt"`
-	}
-
-	resp := suite.post(t, "/api/attempt", map[string]string{
-		"problem_id": "prob-live-test",
-		"lang":       "python",
-	}, &payload)
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200 from attempt creation, got %d", resp.StatusCode)
-	}
-
-	if strings.TrimSpace(payload.Attempt.ID) == "" {
-		t.Fatalf("expected attempt id in response")
-	}
+	return &payload
 }
