@@ -27,7 +27,7 @@ Go application that powers the Improview API. This README covers local developme
 
 - `pnpm backend:serve:local` — Run the API with `backend/.env.local`.
 - `pnpm backend:smoke:local` — Execute smoke tests against `http://localhost:8080`.
-- `pnpm backend:smoke:dev` — Resolve stack outputs, authenticate with Cognito, and hit the deployed dev API (ignores local `IMPROVIEW_LIVE_BASE_URL`/`BASE_URL` unless you pass `--base-url`).
+- `pnpm backend:smoke:dev` — Resolve stack outputs, authenticate with Cognito, and hit the deployed dev API (ignores local `BASE_URL` unless you pass `--base-url`).
 
 `backend/scripts/run-smoke.sh` powers the smoke commands and accepts extra flags. Example:
 
@@ -37,7 +37,7 @@ Go application that powers the Improview API. This README covers local developme
 
 Only `backend/.env.local` is required for local helpers; when you target a deployed stack the script fetches the base URL from CloudFormation automatically.
 
-> Tip: pnpm forwards flags directly, so you can run `pnpm backend:smoke:local --mode llm` or `pnpm backend:smoke:dev --run LiveGenerate` without adding an extra `--`. The helper exports both `IMPROVIEW_LIVE_BASE_URL` and `BASE_URL` for compatibility with CI scripts.
+> Tip: pnpm forwards flags directly, so you can run `pnpm backend:smoke:local --mode llm` or `pnpm backend:smoke:dev --run LiveGenerate` without adding an extra `--`. The helper exports `BASE_URL` for downstream scripts.
 > Output is color-coded when run in a TTY; set `NO_COLOR=1` if you prefer plain logs.
 
 ## Configuration
@@ -122,7 +122,7 @@ SMOKE_TOKEN=$(aws cognito-idp initiate-auth \
   --query 'AuthenticationResult.AccessToken' \
   --output text)
 
-export IMPROVIEW_LIVE_BASE_URL="https://example.execute-api.us-east-1.amazonaws.com"
+export BASE_URL="https://example.execute-api.us-east-1.amazonaws.com"
 export IMPROVIEW_LIVE_ACCESS_TOKEN="$SMOKE_TOKEN"
 
 CI_SMOKE_DEBUG=1 go test ./internal/api -run Live -count=1

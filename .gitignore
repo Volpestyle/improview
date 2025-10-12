@@ -24,3 +24,6 @@ apps/**/dist/
 
 # CDK synthesized assets
 infra/cdk/cdk.out/
+
+# Frontend dev cache
+apps/web/.vite/

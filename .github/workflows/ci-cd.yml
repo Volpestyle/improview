@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - release-*
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -52,7 +53,7 @@ jobs:
   deploy:
     name: Deploy to AWS
     needs: quality
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release-')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment:
@@ -66,7 +67,7 @@ jobs:
       CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.AWS_CLOUDFRONT_DISTRIBUTION_ID }}
       FRONTEND_BUILD_DIR: ${{ vars.FRONTEND_BUILD_DIR }}
       IMPROVIEW_ENV: ${{ vars.IMPROVIEW_ENV }}
-      IMPROVIEW_LIVE_BASE_URL: ${{ vars.IMPROVIEW_LIVE_BASE_URL }}
+      BASE_URL: ${{ vars.BASE_URL }}
       AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -124,11 +125,11 @@ jobs:
         if: steps.deployment_guard.outputs.should_deploy == 'true'
         run: pnpm --dir infra/cdk run deploy:services
       - uses: actions/setup-go@v5
-        if: steps.deployment_guard.outputs.should_deploy == 'true' && env.IMPROVIEW_LIVE_BASE_URL != ''
+        if: steps.deployment_guard.outputs.should_deploy == 'true' && env.BASE_URL != ''
         with:
           go-version-file: backend/go.mod
       - name: Run live API smoke tests
-        if: steps.deployment_guard.outputs.should_deploy == 'true' && env.IMPROVIEW_LIVE_BASE_URL != ''
+        if: steps.deployment_guard.outputs.should_deploy == 'true' && env.BASE_URL != ''
         run: go test ./internal/api -run Live -v
         working-directory: backend
       - name: Skip deployment (missing AWS credentials)
@@ -152,7 +153,7 @@ jobs:
       CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.AWS_CLOUDFRONT_DISTRIBUTION_ID }}
       FRONTEND_BUILD_DIR: ${{ vars.FRONTEND_BUILD_DIR }}
       IMPROVIEW_ENV: ${{ vars.IMPROVIEW_ENV }}
-      IMPROVIEW_LIVE_BASE_URL: ${{ vars.IMPROVIEW_LIVE_BASE_URL }}
+      BASE_URL: ${{ vars.BASE_URL }}
       AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -210,14 +211,11 @@ jobs:
         if: steps.dev_deployment_guard.outputs.should_deploy == 'true'
         run: pnpm --dir infra/cdk run deploy:services
       - uses: actions/setup-go@v5
-        if: steps.dev_deployment_guard.outputs.should_deploy == 'true' && (env.IMPROVIEW_LIVE_BASE_URL != '' || env.BASE_URL != '')
+        if: steps.dev_deployment_guard.outputs.should_deploy == 'true' && env.BASE_URL != ''
         with:
           go-version-file: backend/go.mod
       - name: Run live API smoke tests
-        if: steps.dev_deployment_guard.outputs.should_deploy == 'true' && (env.IMPROVIEW_LIVE_BASE_URL != '' || env.BASE_URL != '')
-        env:
-          BASE_URL: ${{ env.IMPROVIEW_LIVE_BASE_URL != '' && env.IMPROVIEW_LIVE_BASE_URL || env.BASE_URL }}
-          IMPROVIEW_LIVE_BASE_URL: ${{ env.IMPROVIEW_LIVE_BASE_URL != '' && env.IMPROVIEW_LIVE_BASE_URL || env.BASE_URL }}
+        if: steps.dev_deployment_guard.outputs.should_deploy == 'true' && env.BASE_URL != ''
         run: go test ./internal/api -run Live -v
         working-directory: backend
       - name: Skip deployment (missing AWS credentials)

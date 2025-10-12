@@ -385,7 +385,7 @@ if [[ "${LOAD_DOTENV}" -eq 1 && -f "${REPO_ROOT}/backend/.env.local" ]]; then
   source "${REPO_ROOT}/backend/.env.local"
   set +a
 fi
-ENV_BASE_URL="${IMPROVIEW_LIVE_BASE_URL:-}"
+ENV_BASE_URL="${BASE_URL:-}"
 
 if [[ -z "${CLIENT_ID}" ]]; then
   CLIENT_ID="${IMPROVIEW_COGNITO_CLIENT_ID:-${IMPROVIEW_AUTH_COGNITO_APP_CLIENT_ID:-${USER_POOL_CLIENT_ID:-}}}"
@@ -533,8 +533,7 @@ else
 fi
 
 export IMPROVIEW_ENV="${ENV_NAME}"
-export IMPROVIEW_LIVE_BASE_URL="${BASE_URL}"
-export BASE_URL="${IMPROVIEW_LIVE_BASE_URL}"
+export BASE_URL="${BASE_URL}"
 if [[ "${MODE}" == "llm" ]]; then
   export IMPROVIEW_FORCE_GENERATE_MODE="llm"
 else
@@ -566,7 +565,7 @@ if (( ${#EXTRA_GO_ARGS[@]} > 0 )); then
   GO_TEST_CMD+=("${EXTRA_GO_ARGS[@]}")
 fi
 
-log_info "Running smoke tests against ${IMPROVIEW_LIVE_BASE_URL} (mode=${MODE})..."
+log_info "Running smoke tests against ${BASE_URL} (mode=${MODE})..."
 pushd "${BACKEND_DIR}" >/dev/null
 if [[ -n "${COLOR_INFO}" ]]; then
   set -o pipefail

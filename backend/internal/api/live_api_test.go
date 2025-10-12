@@ -43,12 +43,9 @@ func newLiveSuite(t *testing.T) *liveSuite {
 		t.Fatalf("load env file: %v", err)
 	}
 
-	base := os.Getenv("IMPROVIEW_LIVE_BASE_URL")
+	base := os.Getenv("BASE_URL")
 	if base == "" {
-		base = os.Getenv("BASE_URL")
-	}
-	if base == "" {
-		t.Skip("set IMPROVIEW_LIVE_BASE_URL (or BASE_URL) to run live API integration tests")
+		t.Skip("set BASE_URL to run live API integration tests")
 	}
 
 	base = strings.TrimRight(base, "/")
