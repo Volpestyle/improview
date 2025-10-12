@@ -35,6 +35,9 @@ export const HomePage = () => {
   const [difficulty, setDifficulty] = useState('medium');
   const [provider, setProvider] = useState(providerOptions[0]?.value ?? 'openai');
   const [customPrompt, setCustomPrompt] = useState('');
+  const apiBaseUrl =
+    (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:8080';
+  const usingLocalApi = /localhost|127\.0\.0\.1/.test(apiBaseUrl);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { publish } = useToast();
@@ -208,10 +211,11 @@ export const HomePage = () => {
             <div className="flex flex-col gap-1 text-sm text-fg-muted">
               <span className="font-medium text-fg">Run mode</span>
               <span>
-                {import.meta.env.VITE_API_MODE === 'live'
-                  ? 'Live requests against the deployed backend.'
-                  : 'Using local mock responses for ultra-fast iteration.'}
+                {usingLocalApi
+                  ? 'Requests target your local API server.'
+                  : 'Requests hit the deployed API endpoint.'}
               </span>
+              <span className="text-xs text-fg-muted">{apiBaseUrl}</span>
             </div>
             <Button size="lg" onClick={handleGenerate} loading={mutation.isPending}>
               {mutation.isPending ? 'Generating…' : 'Generate workspace'}
