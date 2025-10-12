@@ -38,7 +38,7 @@ var jsonValueSchema = map[string]any{
 var exampleJSONSchema = map[string]any{
 	"type":                 "object",
 	"additionalProperties": false,
-	"required":             []string{"input", "output", "explanation"},
+	"required":             []string{"input", "output"},
 	"properties": map[string]any{
 		"input": map[string]any{
 			"type":  "array",

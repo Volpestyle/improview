@@ -94,13 +94,14 @@ Create an attempt record for a user starting to solve a problem.
 ```json
 {
   "problem_id": "prob_123",
-  "lang": "python"
+  "lang": "python",
+  "user_id": "user_42"
 }
 ```
 
 - `problem_id` *(string, required)* — Identifier from `/api/generate`.
 - `lang` *(string, required)* — Language code for the solution attempt.
-- Caller identity is inferred from the bearer token supplied on the request.
+- `user_id` *(string, optional)* — External user identifier for analytics.
 
 **Response body**
 ```json
@@ -272,11 +273,11 @@ The easiest way to hit the deployed API is the helper script:
 ./backend/scripts/run-smoke.sh --env dev --mode static
 ```
 
-That command resolves the API endpoint, fetches smoke credentials, exchanges them for a Cognito token, and launches the `Live` tests with debug logging. To run them manually instead, set `BASE_URL` to your deployed API Gateway base URL (for the dev stack this is `https://bh853brv47.execute-api.us-east-1.amazonaws.com`) and execute:
+That command resolves the API endpoint, fetches smoke credentials, exchanges them for a Cognito token, and launches the `Live` tests with debug logging. To run them manually instead, set `IMPROVIEW_LIVE_BASE_URL` to your deployed API Gateway base URL (for the dev stack this is `https://bh853brv47.execute-api.us-east-1.amazonaws.com`) and execute:
 
 ```bash
 cd backend
-export BASE_URL="https://your-env.example.com"
+export IMPROVIEW_LIVE_BASE_URL="https://your-env.example.com"
 CI_SMOKE_DEBUG=1 go test ./internal/api -run Live -v
 ```
 
