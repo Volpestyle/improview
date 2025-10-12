@@ -14,10 +14,10 @@ import (
 )
 
 var envKeys = []string{
-	"IMPROVIEW_OPENAI_API_KEY",
-	"IMPROVIEW_OPENAI_BASE_URL",
-	"IMPROVIEW_OPENAI_MODEL",
-	"IMPROVIEW_OPENAI_PROVIDER",
+	"OPENAI_API_KEY",
+	"OPENAI_BASE_URL",
+	"OPENAI_MODEL",
+	"OPENAI_PROVIDER",
 }
 
 // LoadLLMEnvFromSecret pulls provider credentials from Secrets Manager when they are not
@@ -69,7 +69,7 @@ func LoadLLMEnvFromSecret(ctx context.Context) error {
 		}
 	}
 
-	if strings.TrimSpace(os.Getenv("IMPROVIEW_OPENAI_API_KEY")) == "" {
+	if strings.TrimSpace(os.Getenv("OPENAI_API_KEY")) == "" {
 		return errors.New("provider secret did not include openaiApiKey")
 	}
 
@@ -93,16 +93,16 @@ func parseProviderSecret(secret string) (map[string]string, error) {
 
 	results := make(map[string]string)
 	if val, ok := stringValue(payload["openaiApiKey"]); ok {
-		results["IMPROVIEW_OPENAI_API_KEY"] = val
+		results["OPENAI_API_KEY"] = val
 	}
 	if val, ok := stringValue(payload["openaiBaseUrl"]); ok {
-		results["IMPROVIEW_OPENAI_BASE_URL"] = val
+		results["OPENAI_BASE_URL"] = val
 	}
 	if val, ok := stringValue(payload["openaiModel"]); ok {
-		results["IMPROVIEW_OPENAI_MODEL"] = val
+		results["OPENAI_MODEL"] = val
 	}
 	if val, ok := stringValue(payload["openaiProvider"]); ok {
-		results["IMPROVIEW_OPENAI_PROVIDER"] = val
+		results["OPENAI_PROVIDER"] = val
 	}
 
 	return results, nil

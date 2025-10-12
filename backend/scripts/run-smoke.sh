@@ -130,11 +130,11 @@ Options:
   --env <name>                 Environment suffix (default: dev). Used for stack/secret lookup.
   --mode <static|llm>          Generator mode for the backend (default: static).
   --base-url <url>             Override the API Gateway base URL. Defaults to CloudFormation stack output.
-  --llm-base-url <url>         Override IMPROVIEW_OPENAI_BASE_URL when mode=llm.
-  --llm-model <model>          Override IMPROVIEW_OPENAI_MODEL when mode=llm.
-  --llm-provider <name>        Override IMPROVIEW_OPENAI_PROVIDER when mode=llm.
+  --llm-base-url <url>         Override OPENAI_BASE_URL when mode=llm.
+  --llm-model <model>          Override OPENAI_MODEL when mode=llm.
+  --llm-provider <name>        Override OPENAI_PROVIDER when mode=llm.
   --llm-api-key <key>          Provide an OpenAI-compatible API key when mode=llm.
-  --client-id <id>             Cognito App Client ID (defaults to IMPROVIEW_COGNITO_CLIENT_ID or IMPROVIEW_AUTH_COGNITO_APP_CLIENT_ID env).
+  --client-id <id>             Cognito App Client ID (defaults to COGNITO_CLIENT_ID env).
   --client-secret <secret>     Cognito App Client secret. When provided the script calculates SECRET_HASH automatically.
   --secret-id <arn|name>       Secrets Manager identifier for smoke credentials (default: improview/<env>/smoke-credentials).
   --region <aws-region>        AWS region (default: AWS_REGION env or us-east-1).
@@ -156,12 +156,12 @@ ENV_NAME="${IMPROVIEW_ENV:-dev}"
 MODE="static"
 ENV_BASE_URL=""
 BASE_URL=""
-LLM_BASE_URL="${IMPROVIEW_OPENAI_BASE_URL:-}"
-LLM_MODEL="${IMPROVIEW_OPENAI_MODEL:-}"
-LLM_PROVIDER="${IMPROVIEW_OPENAI_PROVIDER:-}"
-LLM_API_KEY="${IMPROVIEW_OPENAI_API_KEY:-}"
-CLIENT_ID="${IMPROVIEW_COGNITO_CLIENT_ID:-${IMPROVIEW_AUTH_COGNITO_APP_CLIENT_ID:-${USER_POOL_CLIENT_ID:-}}}"
-CLIENT_SECRET="${IMPROVIEW_COGNITO_CLIENT_SECRET:-}"  # optional
+LLM_BASE_URL="${OPENAI_BASE_URL:-}"
+LLM_MODEL="${OPENAI_MODEL:-}"
+LLM_PROVIDER="${OPENAI_PROVIDER:-}"
+LLM_API_KEY="${OPENAI_API_KEY:-}"
+CLIENT_ID="${COGNITO_CLIENT_ID:-}"
+CLIENT_SECRET="${COGNITO_CLIENT_SECRET:-}"  # optional
 SECRET_ID=""
 REGION="${AWS_REGION:-us-east-1}"
 RUN_PATTERN="Live"
@@ -388,11 +388,11 @@ fi
 ENV_BASE_URL="${BASE_URL:-}"
 
 if [[ -z "${CLIENT_ID}" ]]; then
-  CLIENT_ID="${IMPROVIEW_COGNITO_CLIENT_ID:-${IMPROVIEW_AUTH_COGNITO_APP_CLIENT_ID:-${USER_POOL_CLIENT_ID:-}}}"
+  CLIENT_ID="${COGNITO_CLIENT_ID:-}"
 fi
 
 if [[ -z "${CLIENT_SECRET}" ]]; then
-  CLIENT_SECRET="${IMPROVIEW_COGNITO_CLIENT_SECRET:-}"  # optional
+  CLIENT_SECRET="${COGNITO_CLIENT_SECRET:-}"  # optional
 fi
 
 if [[ -z "${BASE_URL}" && "${LOCAL_RUN}" -eq 1 ]]; then
@@ -404,19 +404,19 @@ if [[ -z "${BASE_URL}" && "${LOCAL_RUN}" -eq 1 ]]; then
 fi
 
 if [[ -z "${LLM_BASE_URL}" ]]; then
-  LLM_BASE_URL="${IMPROVIEW_OPENAI_BASE_URL:-}"
+  LLM_BASE_URL="${OPENAI_BASE_URL:-}"
 fi
 
 if [[ -z "${LLM_MODEL}" ]]; then
-  LLM_MODEL="${IMPROVIEW_OPENAI_MODEL:-}"
+  LLM_MODEL="${OPENAI_MODEL:-}"
 fi
 
 if [[ -z "${LLM_PROVIDER}" ]]; then
-  LLM_PROVIDER="${IMPROVIEW_OPENAI_PROVIDER:-}"
+  LLM_PROVIDER="${OPENAI_PROVIDER:-}"
 fi
 
 if [[ -z "${LLM_API_KEY}" ]]; then
-  LLM_API_KEY="${IMPROVIEW_OPENAI_API_KEY:-}"
+  LLM_API_KEY="${OPENAI_API_KEY:-}"
 fi
 
 if [[ -z "${REGION}" || "${REGION}" == "us-east-1" ]]; then
@@ -424,7 +424,7 @@ if [[ -z "${REGION}" || "${REGION}" == "us-east-1" ]]; then
 fi
 
 if [[ -z "${CLIENT_ID}" && "${LOCAL_RUN}" -eq 0 ]]; then
-  log_error "Cognito client ID is required (set via --client-id or IMPROVIEW_COGNITO_CLIENT_ID env)."
+  log_error "Cognito client ID is required (set via --client-id or COGNITO_CLIENT_ID env)."
   exit 1
 fi
 
@@ -542,16 +542,16 @@ fi
 
 if [[ "${MODE}" == "llm" ]]; then
   if [[ -n "${LLM_API_KEY}" ]]; then
-    export IMPROVIEW_OPENAI_API_KEY="${LLM_API_KEY}"
+    export OPENAI_API_KEY="${LLM_API_KEY}"
   fi
   if [[ -n "${LLM_BASE_URL}" ]]; then
-    export IMPROVIEW_OPENAI_BASE_URL="${LLM_BASE_URL}"
+    export OPENAI_BASE_URL="${LLM_BASE_URL}"
   fi
   if [[ -n "${LLM_MODEL}" ]]; then
-    export IMPROVIEW_OPENAI_MODEL="${LLM_MODEL}"
+    export OPENAI_MODEL="${LLM_MODEL}"
   fi
   if [[ -n "${LLM_PROVIDER}" ]]; then
-    export IMPROVIEW_OPENAI_PROVIDER="${LLM_PROVIDER}"
+    export OPENAI_PROVIDER="${LLM_PROVIDER}"
   fi
 fi
 

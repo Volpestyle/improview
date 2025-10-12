@@ -16,10 +16,10 @@ func TestParseProviderSecretExtractsKnownFields(t *testing.T) {
 		t.Fatalf("parse provider secret: %v", err)
 	}
 
-	assertEqual(t, env["IMPROVIEW_OPENAI_API_KEY"], "key-123")
-	assertEqual(t, env["IMPROVIEW_OPENAI_BASE_URL"], "https://api.sandbox/v1")
-	assertEqual(t, env["IMPROVIEW_OPENAI_MODEL"], "gpt-sandbox")
-	assertEqual(t, env["IMPROVIEW_OPENAI_PROVIDER"], "sandbox")
+	assertEqual(t, env["OPENAI_API_KEY"], "key-123")
+	assertEqual(t, env["OPENAI_BASE_URL"], "https://api.sandbox/v1")
+	assertEqual(t, env["OPENAI_MODEL"], "gpt-sandbox")
+	assertEqual(t, env["OPENAI_PROVIDER"], "sandbox")
 
 	if _, ok := env["grokApiKey"]; ok {
 		t.Fatalf("unexpected field grokApiKey propagated")

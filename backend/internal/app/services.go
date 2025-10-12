@@ -57,15 +57,15 @@ func NewInMemoryServices(clock api.Clock) api.Services {
 // NewServicesFromEnv constructs backend services based on environment variables.
 //
 // Recognised variables:
-//   - IMPROVIEW_OPENAI_API_KEY: required when using the LLM generator
-//   - IMPROVIEW_OPENAI_MODEL: overrides the default OpenAI model
-//   - IMPROVIEW_OPENAI_BASE_URL: overrides the OpenAI API base URL
-//   - IMPROVIEW_OPENAI_PROVIDER: optional label recorded in prompts
-//   - IMPROVIEW_OPENAI_TIMEOUT_SECONDS: request timeout when mode=llm
-//   - IMPROVIEW_OPENAI_TEMPERATURE: float temperature override when mode=llm
+//   - OPENAI_API_KEY: required when using the LLM generator
+//   - OPENAI_MODEL: overrides the default OpenAI model
+//   - OPENAI_BASE_URL: overrides the OpenAI API base URL
+//   - OPENAI_PROVIDER: optional label recorded in prompts
+//   - OPENAI_TIMEOUT_SECONDS: request timeout when mode=llm
+//   - OPENAI_TEMPERATURE: float temperature override when mode=llm
 func NewServicesFromEnv(clock api.Clock) (api.Services, error) {
 	options := ServicesOptions{
-		GeneratorMode: GeneratorModeStatic,
+		GeneratorMode: "",
 		LLM:           parseLLMOptionsFromEnv(),
 	}
 
@@ -84,35 +84,25 @@ func NewServicesFromEnv(clock api.Clock) (api.Services, error) {
 }
 
 func configureAuthenticatorFromEnv() (auth.Authenticator, error) {
-	userPoolID := firstNonEmpty(
-		os.Getenv("IMPROVIEW_AUTH_COGNITO_USER_POOL_ID"),
-		os.Getenv("USER_POOL_ID"),
-	)
-	userPoolID = strings.TrimSpace(userPoolID)
+	userPoolID := strings.TrimSpace(os.Getenv("COGNITO_USER_POOL_ID"))
 	if userPoolID == "" {
 		return nil, nil
 	}
 
-	clientIDs := splitCSV(os.Getenv("IMPROVIEW_AUTH_COGNITO_APP_CLIENT_IDS"))
-	if single := strings.TrimSpace(os.Getenv("IMPROVIEW_AUTH_COGNITO_APP_CLIENT_ID")); single != "" {
-		clientIDs = append(clientIDs, single)
-	}
-	if fallback := strings.TrimSpace(os.Getenv("USER_POOL_CLIENT_ID")); fallback != "" {
-		clientIDs = append(clientIDs, fallback)
-	}
+	clientIDs := splitCSV(os.Getenv("COGNITO_APP_CLIENT_IDS"))
 	clientIDs = uniqueStrings(clientIDs)
 	if len(clientIDs) == 0 {
-		return nil, fmt.Errorf("cognito auth: at least one app client id is required (set IMPROVIEW_AUTH_COGNITO_APP_CLIENT_IDS or USER_POOL_CLIENT_ID)")
+		return nil, fmt.Errorf("cognito auth: at least one app client id is required (set COGNITO_APP_CLIENT_IDS)")
 	}
 
 	cfg := auth.CognitoConfig{
 		UserPoolID:   userPoolID,
 		Region:       resolveCognitoRegion(userPoolID),
 		AppClientIDs: clientIDs,
-		JWKSURL:      strings.TrimSpace(os.Getenv("IMPROVIEW_AUTH_COGNITO_JWKS_URL")),
+		JWKSURL:      strings.TrimSpace(os.Getenv("COGNITO_JWKS_URL")),
 	}
 
-	if raw := strings.TrimSpace(os.Getenv("IMPROVIEW_AUTH_JWKS_CACHE_TTL_SECONDS")); raw != "" {
+	if raw := strings.TrimSpace(os.Getenv("COGNITO_JWKS_CACHE_TTL_SECONDS")); raw != "" {
 		if seconds, err := strconv.Atoi(raw); err == nil && seconds > 0 {
 			cfg.CacheTTL = time.Duration(seconds) * time.Second
 		}
@@ -122,7 +112,7 @@ func configureAuthenticatorFromEnv() (auth.Authenticator, error) {
 }
 
 func resolveCognitoRegion(userPoolID string) string {
-	if region := strings.TrimSpace(os.Getenv("IMPROVIEW_AUTH_COGNITO_REGION")); region != "" {
+	if region := strings.TrimSpace(os.Getenv("COGNITO_REGION")); region != "" {
 		return region
 	}
 	if region := strings.TrimSpace(os.Getenv("AWS_REGION")); region != "" {
@@ -137,35 +127,26 @@ func resolveCognitoRegion(userPoolID string) string {
 	return ""
 }
 
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if trimmed := strings.TrimSpace(value); trimmed != "" {
-			return trimmed
-		}
-	}
-	return ""
-}
-
 func parseLLMOptionsFromEnv() LLMOptions {
 	timeout := defaultLLMTimeout
-	if raw := strings.TrimSpace(os.Getenv("IMPROVIEW_OPENAI_TIMEOUT_SECONDS")); raw != "" {
+	if raw := strings.TrimSpace(os.Getenv("OPENAI_TIMEOUT_SECONDS")); raw != "" {
 		if seconds, err := strconv.Atoi(raw); err == nil && seconds > 0 {
 			timeout = time.Duration(seconds) * time.Second
 		}
 	}
 
 	temperature := 0.2
-	if raw := strings.TrimSpace(os.Getenv("IMPROVIEW_OPENAI_TEMPERATURE")); raw != "" {
+	if raw := strings.TrimSpace(os.Getenv("OPENAI_TEMPERATURE")); raw != "" {
 		if val, err := strconv.ParseFloat(raw, 64); err == nil {
 			temperature = val
 		}
 	}
 
 	return LLMOptions{
-		APIKey:      strings.TrimSpace(os.Getenv("IMPROVIEW_OPENAI_API_KEY")),
-		BaseURL:     defaultString(os.Getenv("IMPROVIEW_OPENAI_BASE_URL"), defaultLLMBaseURL),
-		Model:       defaultString(os.Getenv("IMPROVIEW_OPENAI_MODEL"), defaultLLMModel),
-		Provider:    strings.TrimSpace(os.Getenv("IMPROVIEW_OPENAI_PROVIDER")),
+		APIKey:      strings.TrimSpace(os.Getenv("OPENAI_API_KEY")),
+		BaseURL:     defaultString(os.Getenv("OPENAI_BASE_URL"), defaultLLMBaseURL),
+		Model:       defaultString(os.Getenv("OPENAI_MODEL"), defaultLLMModel),
+		Provider:    strings.TrimSpace(os.Getenv("OPENAI_PROVIDER")),
 		Temperature: temperature,
 		Timeout:     timeout,
 	}
@@ -222,11 +203,21 @@ func newServices(clock api.Clock, options ServicesOptions) (api.Services, error)
 		if err != nil {
 			return api.Services{}, err
 		}
-	} else if options.GeneratorMode == GeneratorModeLLM {
+	}
+
+	defaultMode := options.GeneratorMode
+	if defaultMode == "" {
+		if llmGenerator != nil {
+			defaultMode = GeneratorModeLLM
+		} else {
+			defaultMode = GeneratorModeStatic
+		}
+	}
+	if defaultMode == GeneratorModeLLM && llmGenerator == nil {
 		return api.Services{}, fmt.Errorf("llm generator: missing API key")
 	}
 
-	generator, err := NewDynamicProblemGenerator(options.GeneratorMode, staticGenerator, llmGenerator)
+	generator, err := NewDynamicProblemGenerator(defaultMode, staticGenerator, llmGenerator)
 	if err != nil {
 		return api.Services{}, err
 	}

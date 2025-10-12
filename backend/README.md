@@ -11,7 +11,7 @@ Go application that powers the Improview API. This README covers local developme
 
 ## Local Development
 
-1. Configure `backend/.env.local` with the generator mode (`IMPROVIEW_GENERATOR_MODE=static|llm`) and any OpenAI-compatible credentials. The pnpm helpers load this file through `dotenvx`.
+1. Configure `backend/.env.local` with any required OpenAI-compatible credentials (API key, model overrides, etc.). The pnpm helpers load this file through `dotenvx`.
 2. Start the API:
    ```bash
    pnpm backend:serve:local
@@ -42,35 +42,30 @@ Only `backend/.env.local` is required for local helpers; when you target a deplo
 
 ## Configuration
 
-### Generator Modes
-
-- `static` (default) — Uses `StaticProblemGenerator` and canned problems; safe for CI and offline testing.
-- `llm` — Sends `/api/generate` requests to an OpenAI-compatible provider for live generation.
-
-Set the default with `IMPROVIEW_GENERATOR_MODE`. Per-request callers can override by passing `"mode": "llm"` or `"static"` in the JSON payload; unknown values fall back to the configured default.
+When `OPENAI_API_KEY` is present the live LLM generator becomes available. Static packs remain the default, and callers can pass `"mode": "llm"` or `"mode": "static"` per request (or via `run-smoke.sh --mode ...`) to override the behavior.
 
 ### Environment Variables
 
 | Variable | Description | Required |
 | --- | --- | --- |
-| `IMPROVIEW_OPENAI_API_KEY` | API key when `IMPROVIEW_GENERATOR_MODE=llm`. | Yes (llm) |
-| `IMPROVIEW_OPENAI_MODEL` | Model name (defaults to `gpt-4.1-mini`). | No |
-| `IMPROVIEW_OPENAI_BASE_URL` | Override base URL (`https://api.openai.com/v1` by default). | No |
-| `IMPROVIEW_OPENAI_PROVIDER` | Optional label recorded with requests. | No |
-| `IMPROVIEW_OPENAI_TIMEOUT_SECONDS` | Request timeout in seconds (defaults to `25`). | No |
-| `IMPROVIEW_OPENAI_TEMPERATURE` | Sampling temperature (defaults to `0.2`). | No |
+| `OPENAI_API_KEY` | API key that enables live LLM-backed generation. | Yes (llm) |
+| `OPENAI_MODEL` | Model name (defaults to `gpt-4.1-mini`). | No |
+| `OPENAI_BASE_URL` | Override base URL (`https://api.openai.com/v1` by default). | No |
+| `OPENAI_PROVIDER` | Optional label recorded with requests. | No |
+| `OPENAI_TIMEOUT_SECONDS` | Request timeout in seconds (defaults to `25`). | No |
+| `OPENAI_TEMPERATURE` | Sampling temperature (defaults to `0.2`). | No |
 
 #### Authentication
 
 | Variable | Description | Required |
 | --- | --- | --- |
-| `IMPROVIEW_AUTH_COGNITO_USER_POOL_ID` | Cognito User Pool ID (or `USER_POOL_ID`). Enabling this turns auth on. | Yes (secured) |
-| `IMPROVIEW_AUTH_COGNITO_APP_CLIENT_IDS` | Comma-separated list of allowed app client IDs. Falls back to `IMPROVIEW_AUTH_COGNITO_APP_CLIENT_ID` or `USER_POOL_CLIENT_ID`. | Yes (secured) |
-| `IMPROVIEW_AUTH_COGNITO_REGION` | Override region parsed from the pool ID. | No |
-| `IMPROVIEW_AUTH_COGNITO_JWKS_URL` | Custom JWKS URL (defaults to Cognito discovery). | No |
-| `IMPROVIEW_AUTH_JWKS_CACHE_TTL_SECONDS` | Cache TTL for downloaded JWKS keys. | No |
+| `COGNITO_USER_POOL_ID` | Cognito User Pool ID. Enabling this turns auth on. | Yes (secured) |
+| `COGNITO_APP_CLIENT_IDS` | Comma-separated list of allowed app client IDs. | Yes (secured) |
+| `COGNITO_REGION` | Override region parsed from the pool ID. | No |
+| `COGNITO_JWKS_URL` | Custom JWKS URL (defaults to Cognito discovery). | No |
+| `COGNITO_JWKS_CACHE_TTL_SECONDS` | Cache TTL for downloaded JWKS keys. | No |
 
-> The CDK stack automatically injects `USER_POOL_ID` and `USER_POOL_CLIENT_ID` into the Lambda runtime, so deployed stacks stay authenticated without extra configuration.
+> The CDK stack automatically injects `COGNITO_USER_POOL_ID` and `COGNITO_APP_CLIENT_IDS` into the Lambda runtime, so deployed stacks stay authenticated without extra configuration.
 
 ## Smoke Tests
 
@@ -116,7 +111,7 @@ If you ever need to run the flow manually, obtain a token with:
 ```bash
 SMOKE_TOKEN=$(aws cognito-idp initiate-auth \
   --region us-east-1 \
-  --client-id "$IMPROVIEW_COGNITO_CLIENT_ID" \
+  --client-id "$COGNITO_CLIENT_ID" \
   --auth-flow USER_PASSWORD_AUTH \
   --auth-parameters USERNAME=$SMOKE_USER,PASSWORD=$SMOKE_PASSWORD \
   --query 'AuthenticationResult.AccessToken' \
