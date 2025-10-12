@@ -1,0 +1,27 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": "./src",
+    "paths": {
+      "@app/*": ["*"],
+      "@improview/ui": ["../../packages/ui/src/index.ts"],
+      "@improview/ui/*": ["../../packages/ui/src/*"]
+    },
+    "types": ["vitest/globals"]
+  },
+  "include": [
+    "src",
+    "../../packages/ui/src",
+    "vite.config.ts",
+    "vitest.config.ts",
+    "vitest.setup.ts",
+    "tailwind.config.ts",
+    "postcss.config.cjs"
+  ],
+  "exclude": [
+    "../../packages/ui/src/**/*.spec.ts",
+    "../../packages/ui/src/**/*.test.ts",
+    "../../packages/ui/src/**/*.a11y.spec.ts",
+    "../../packages/ui/src/**/*.stories.tsx"
+  ]
+}
