@@ -7,6 +7,7 @@ responses are JSON encoded unless noted otherwise.
 
 - Base path: `/api`
 - Request/response bodies use UTF-8 JSON.
+- All endpoints (except `/api/healthz` and `/api/version`) require an `Authorization: Bearer <access_token>` header issued by Cognito. Missing or invalid tokens return `401` (unauthenticated) or `403` (forbidden).
 - Errors follow the envelope:
   ```json
   {
@@ -23,20 +24,30 @@ responses are JSON encoded unless noted otherwise.
 
 Create a new problem pack and persist it.
 
+Include the header `Authorization: Bearer <access_token>` for authenticated calls.
+
 **Request body**
 ```json
 {
   "category": "arrays",
   "difficulty": "medium",
+  "mode": "llm",
   "customPrompt": "optional override",
-  "provider": "anthropic"
+  "provider": "anthropic",
+  "llm": {
+    "model": "gpt-4.1-mini",
+    "baseUrl": "https://api.openai.com/v1",
+    "provider": "openai"
+  }
 }
 ```
 
 - `category` *(string, required)* — Requested topic category.
 - `difficulty` *(string, required)* — Difficulty label (e.g. `easy`, `medium`).
+- `mode` *(string, optional)* — Choose between `"static"` (default) and `"llm"`. When omitted the backend uses its configured default.
 - `customPrompt` *(string, optional)* — Custom problem description prompt.
-- `provider` *(string, optional)* — Downstream model/provider hint.
+- `provider` *(string, optional)* — Downstream model/provider hint recorded with the request.
+- `llm` *(object, optional)* — Per-request overrides for `model`, `baseUrl`, and `provider` when `mode` is `llm`.
 
 **Response body**
 ```json
@@ -256,7 +267,13 @@ Report the backend version string.
 
 ## Live Integration Tests
 
-Set `IMPROVIEW_LIVE_BASE_URL` to your deployed API Gateway base URL (for the dev stack this is `https://bh853brv47.execute-api.us-east-1.amazonaws.com`). From `backend`, run the live checks with debugging enabled:
+The easiest way to hit the deployed API is the helper script:
+
+```bash
+./backend/scripts/run-smoke.sh --env dev --mode static
+```
+
+That command resolves the API endpoint, fetches smoke credentials, exchanges them for a Cognito token, and launches the `Live` tests with debug logging. To run them manually instead, set `IMPROVIEW_LIVE_BASE_URL` to your deployed API Gateway base URL (for the dev stack this is `https://bh853brv47.execute-api.us-east-1.amazonaws.com`) and execute:
 
 ```bash
 cd backend

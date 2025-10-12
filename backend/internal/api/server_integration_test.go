@@ -20,8 +20,7 @@ import (
 func setupServer(t *testing.T) *api.Server {
 	t.Helper()
 
-	mode := strings.ToLower(strings.TrimSpace(os.Getenv("IMPROVIEW_GENERATOR_MODE")))
-	if mode == string(app.GeneratorModeLLM) {
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("IMPROVIEW_FORCE_GENERATE_MODE")), string(app.GeneratorModeLLM)) {
 		if err := testenv.LoadOnce(".env.local"); err != nil {
 			t.Fatalf("load env file: %v", err)
 		}

@@ -10,13 +10,16 @@ import (
 	"testing"
 	"time"
 
+	"improview/backend/internal/app"
 	"improview/backend/internal/domain"
 	"improview/backend/internal/jsonfmt"
+	"improview/backend/internal/testenv"
 )
 
 type liveSuite struct {
 	baseURL string
 	client  *http.Client
+	token   string
 }
 
 const smokeLogMaxBodyBytes = jsonfmt.DefaultLogLimit
@@ -36,6 +39,10 @@ func logSmoke(t *testing.T, format string, args ...any) {
 func newLiveSuite(t *testing.T) *liveSuite {
 	t.Helper()
 
+	if err := testenv.LoadOnce(".env.local"); err != nil {
+		t.Fatalf("load env file: %v", err)
+	}
+
 	base := os.Getenv("IMPROVIEW_LIVE_BASE_URL")
 	if base == "" {
 		base = os.Getenv("BASE_URL")
@@ -49,6 +56,7 @@ func newLiveSuite(t *testing.T) *liveSuite {
 	return &liveSuite{
 		baseURL: base,
 		client:  &http.Client{Timeout: 15 * time.Second},
+		token:   strings.TrimSpace(os.Getenv("IMPROVIEW_LIVE_ACCESS_TOKEN")),
 	}
 }
 
@@ -58,6 +66,10 @@ func (s *liveSuite) get(t *testing.T, path string, target any) *http.Response {
 	req, err := http.NewRequest(http.MethodGet, s.baseURL+path, nil)
 	if err != nil {
 		t.Fatalf("create request: %v", err)
+	}
+
+	if s.token != "" {
+		req.Header.Set("Authorization", "Bearer "+s.token)
 	}
 
 	logSmoke(t, "[GET %s] sending request", path)
@@ -84,6 +96,9 @@ func (s *liveSuite) post(t *testing.T, path string, payload any, target any) *ht
 		t.Fatalf("create request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if s.token != "" {
+		req.Header.Set("Authorization", "Bearer "+s.token)
+	}
 
 	logSmoke(t, "[POST %s] payload=%s", path, jsonfmt.FormatForLog(body, smokeLogMaxBodyBytes))
 
@@ -282,10 +297,17 @@ func generateProblem(t *testing.T, suite *liveSuite) *struct {
 		Pack      domain.ProblemPack `json:"pack"`
 	}
 
-	resp := suite.post(t, "/api/generate", map[string]string{
+	request := map[string]any{
 		"category":   "arrays",
 		"difficulty": "easy",
-	}, &payload)
+	}
+
+	forceMode := strings.TrimSpace(os.Getenv("IMPROVIEW_FORCE_GENERATE_MODE"))
+	if strings.EqualFold(forceMode, string(app.GeneratorModeLLM)) {
+		request["mode"] = string(app.GeneratorModeLLM)
+	}
+
+	resp := suite.post(t, "/api/generate", request, &payload)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200 from generate, got %d", resp.StatusCode)
 	}

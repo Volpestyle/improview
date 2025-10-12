@@ -57,28 +57,16 @@ func NewInMemoryServices(clock api.Clock) api.Services {
 // NewServicesFromEnv constructs backend services based on environment variables.
 //
 // Recognised variables:
-//   - IMPROVIEW_GENERATOR_MODE: "static" (default) or "llm"
-//   - IMPROVIEW_OPENAI_API_KEY: required when mode=llm
+//   - IMPROVIEW_OPENAI_API_KEY: required when using the LLM generator
 //   - IMPROVIEW_OPENAI_MODEL: overrides the default OpenAI model
 //   - IMPROVIEW_OPENAI_BASE_URL: overrides the OpenAI API base URL
 //   - IMPROVIEW_OPENAI_PROVIDER: optional label recorded in prompts
 //   - IMPROVIEW_OPENAI_TIMEOUT_SECONDS: request timeout when mode=llm
 //   - IMPROVIEW_OPENAI_TEMPERATURE: float temperature override when mode=llm
 func NewServicesFromEnv(clock api.Clock) (api.Services, error) {
-	mode := GeneratorMode(strings.ToLower(strings.TrimSpace(os.Getenv("IMPROVIEW_GENERATOR_MODE"))))
-	if mode == "" {
-		mode = GeneratorModeStatic
-	}
-
 	options := ServicesOptions{
-		GeneratorMode: mode,
+		GeneratorMode: GeneratorModeStatic,
 		LLM:           parseLLMOptionsFromEnv(),
-	}
-	switch mode {
-	case GeneratorModeStatic, GeneratorModeLLM:
-		// handled later
-	default:
-		return api.Services{}, fmt.Errorf("unknown generator mode %q", mode)
 	}
 
 	services, err := newServices(clock, options)
