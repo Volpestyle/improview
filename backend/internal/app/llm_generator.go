@@ -7,11 +7,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"os"
 	"strings"
 
 	"improview/backend/internal/api"
 	"improview/backend/internal/domain"
+	"improview/backend/internal/jsonfmt"
 )
 
 // LLMProblemGenerator talks to an LLM provider to create fresh problem packs.
@@ -51,7 +54,12 @@ func NewLLMProblemGenerator(opts LLMOptions) (*LLMProblemGenerator, error) {
 		temperature = 0.2
 	}
 
-	client := &http.Client{Timeout: timeout}
+	client := opts.HTTPClient
+	if client == nil {
+		client = &http.Client{Timeout: timeout}
+	} else if client.Timeout == 0 {
+		client.Timeout = timeout
+	}
 
 	return &LLMProblemGenerator{
 		client:      client,
@@ -69,6 +77,21 @@ func (g *LLMProblemGenerator) Generate(ctx context.Context, req api.GenerateRequ
 		return domain.ProblemPack{}, api.ErrNotImplemented
 	}
 
+	baseURL := g.baseURL
+	model := g.model
+	provider := g.provider
+	if req.LLM != nil {
+		if trimmed := strings.TrimSpace(req.LLM.BaseURL); trimmed != "" {
+			baseURL = strings.TrimRight(trimmed, "/")
+		}
+		if trimmed := strings.TrimSpace(req.LLM.Model); trimmed != "" {
+			model = trimmed
+		}
+		if trimmed := strings.TrimSpace(req.LLM.Provider); trimmed != "" {
+			provider = trimmed
+		}
+	}
+
 	category := strings.TrimSpace(req.Category)
 	difficulty := strings.TrimSpace(req.Difficulty)
 	if category == "" || difficulty == "" {
@@ -76,12 +99,12 @@ func (g *LLMProblemGenerator) Generate(ctx context.Context, req api.GenerateRequ
 	}
 
 	payload := chatCompletionRequest{
-		Model:          g.model,
+		Model:          model,
 		ResponseFormat: responseFormat{Type: "json_object"},
 		Temperature:    g.temperature,
 		Messages: []chatMessage{
-			{Role: "system", Content: g.systemPrompt(category, difficulty)},
-			{Role: "user", Content: g.userPrompt(category, difficulty, req.CustomPrompt, req.Provider)},
+			{Role: "system", Content: g.systemPrompt(category, difficulty, provider)},
+			{Role: "user", Content: g.userPrompt(category, difficulty, req.CustomPrompt, req.Provider, provider)},
 		},
 	}
 
@@ -90,7 +113,12 @@ func (g *LLMProblemGenerator) Generate(ctx context.Context, req api.GenerateRequ
 		return domain.ProblemPack{}, fmt.Errorf("llm generator: marshal request: %w", err)
 	}
 
-	endpoint := g.baseURL + "/chat/completions"
+	if baseURL == "" {
+		return domain.ProblemPack{}, errors.New("llm generator: missing base URL")
+	}
+
+	endpoint := baseURL + "/chat/completions"
+	g.logf("POST %s payload=%s", endpoint, jsonfmt.FormatForLog(body, jsonfmt.DefaultLogLimit))
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return domain.ProblemPack{}, fmt.Errorf("llm generator: create request: %w", err)
@@ -109,6 +137,8 @@ func (g *LLMProblemGenerator) Generate(ctx context.Context, req api.GenerateRequ
 	if err != nil {
 		return domain.ProblemPack{}, fmt.Errorf("llm generator: read response: %w", err)
 	}
+
+	g.logf("response status=%d body=%s", resp.StatusCode, jsonfmt.FormatForLog(respBody, jsonfmt.DefaultLogLimit))
 
 	if resp.StatusCode >= 400 {
 		return domain.ProblemPack{}, g.wrapHTTPError(resp.StatusCode, respBody)
@@ -132,10 +162,10 @@ func (g *LLMProblemGenerator) Generate(ctx context.Context, req api.GenerateRequ
 	return pack, nil
 }
 
-func (g *LLMProblemGenerator) systemPrompt(category, difficulty string) string {
+func (g *LLMProblemGenerator) systemPrompt(category, difficulty, provider string) string {
 	var providerLine string
-	if g.provider != "" {
-		providerLine = fmt.Sprintf("Provider: %s\\n", g.provider)
+	if provider != "" {
+		providerLine = fmt.Sprintf("Provider: %s\n", provider)
 	}
 
 	return fmt.Sprintf(`You are Improview’s problem generator. Return ONLY JSON matching the schema.
@@ -157,14 +187,14 @@ Rules:
 - Prefer BFS/DFS/Two-Pointers/etc as per category.`, providerLine, category, difficulty)
 }
 
-func (g *LLMProblemGenerator) userPrompt(category, difficulty, customPrompt, providerOverride string) string {
+func (g *LLMProblemGenerator) userPrompt(category, difficulty, customPrompt, providerOverride, defaultProvider string) string {
 	lines := []string{
 		fmt.Sprintf("Generate a fresh problem pack for category \"%s\" at \"%s\" difficulty.", category, difficulty),
 	}
 
 	provider := strings.TrimSpace(providerOverride)
 	if provider == "" {
-		provider = g.provider
+		provider = defaultProvider
 	}
 	if provider != "" {
 		lines = append(lines, fmt.Sprintf("If you must reference a provider, assume %s.", provider))
@@ -188,6 +218,17 @@ func (g *LLMProblemGenerator) wrapHTTPError(status int, body []byte) error {
 		snippet = snippet[:256]
 	}
 	return fmt.Errorf("llm generator: upstream returned %d: %s", status, snippet)
+}
+
+func (g *LLMProblemGenerator) logf(format string, args ...any) {
+	if !llmDebugEnabled() {
+		return
+	}
+	log.Printf("llm generator: "+format, args...)
+}
+
+func llmDebugEnabled() bool {
+	return strings.TrimSpace(os.Getenv("CI_SMOKE_DEBUG")) != ""
 }
 
 type responseFormat struct {
