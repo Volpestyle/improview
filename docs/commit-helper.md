@@ -62,6 +62,9 @@ of entries, in chronological order:
 - `paths` (required): Array of paths to stage for the commit. Use `"all"` to stage the entire tree
   for a single commit.
 
+> Keep commits meaningful, not tiny. If a set of related changes fits comfortably into one commit,
+> prefer grouping them together and capture the detail in descriptive bullets in the `body`.
+
 ## Create commits and push
 
 Run the script with the plan file to generate commits and push to the current branch:
