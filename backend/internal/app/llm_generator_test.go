@@ -132,8 +132,20 @@ func TestLLMProblemGeneratorGenerate(t *testing.T) {
 	if capturedRequest.Model != "gpt-test" {
 		t.Fatalf("expected model gpt-test, got %s", capturedRequest.Model)
 	}
-	if capturedRequest.ResponseFormat.Type != "json_object" {
-		t.Fatalf("expected response_format json_object, got %s", capturedRequest.ResponseFormat.Type)
+	if capturedRequest.ResponseFormat.Type != "json_schema" {
+		t.Fatalf("expected response_format json_schema, got %s", capturedRequest.ResponseFormat.Type)
+	}
+	if capturedRequest.ResponseFormat.JSONSchema == nil {
+		t.Fatalf("expected json schema payload on response format")
+	}
+	if !capturedRequest.ResponseFormat.JSONSchema.Strict {
+		t.Fatalf("expected json schema strict mode")
+	}
+	if capturedRequest.ResponseFormat.JSONSchema.Name != "problem_pack" {
+		t.Fatalf("expected json schema name problem_pack, got %s", capturedRequest.ResponseFormat.JSONSchema.Name)
+	}
+	if capturedRequest.ResponseFormat.JSONSchema.Schema == nil {
+		t.Fatalf("expected json schema body")
 	}
 	if len(capturedRequest.Messages) != 2 {
 		t.Fatalf("expected two messages, got %d", len(capturedRequest.Messages))
@@ -254,6 +266,9 @@ func TestLLMProblemGeneratorHonoursRequestOverrides(t *testing.T) {
 	}
 	if capture.request.Model != "gpt-override" {
 		t.Fatalf("expected override model, got %s", capture.request.Model)
+	}
+	if capture.request.ResponseFormat.Type != "json_schema" {
+		t.Fatalf("expected json schema format, got %s", capture.request.ResponseFormat.Type)
 	}
 	if len(capture.request.Messages) == 0 || !strings.Contains(capture.request.Messages[0].Content, "Provider: Override Provider") {
 		t.Fatalf("expected override provider in system prompt, got %#v", capture.request.Messages)

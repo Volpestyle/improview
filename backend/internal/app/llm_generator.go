@@ -17,6 +17,190 @@ import (
 	"improview/backend/internal/jsonfmt"
 )
 
+var jsonValueSchema = map[string]any{
+	"anyOf": []any{
+		map[string]any{"type": "string"},
+		map[string]any{"type": "number"},
+		map[string]any{"type": "integer"},
+		map[string]any{"type": "boolean"},
+		map[string]any{"type": "null"},
+		map[string]any{
+			"type":  "array",
+			"items": map[string]any{"$ref": "#/$defs/json_value"},
+		},
+		map[string]any{
+			"type":                 "object",
+			"additionalProperties": map[string]any{"$ref": "#/$defs/json_value"},
+		},
+	},
+}
+
+var exampleJSONSchema = map[string]any{
+	"type":                 "object",
+	"additionalProperties": false,
+	"required":             []string{"input", "output"},
+	"properties": map[string]any{
+		"input": map[string]any{
+			"type":  "array",
+			"items": map[string]any{"$ref": "#/$defs/json_value"},
+		},
+		"output": map[string]any{
+			"$ref": "#/$defs/json_value",
+		},
+		"explanation": map[string]any{
+			"type": "string",
+		},
+	},
+}
+
+var problemPackJSONSchema = map[string]any{
+	"type":                 "object",
+	"additionalProperties": false,
+	"required": []string{
+		"problem",
+		"api",
+		"time_estimate_minutes",
+		"hint",
+		"solutions",
+		"tests",
+	},
+	"properties": map[string]any{
+		"problem": map[string]any{
+			"type":                 "object",
+			"additionalProperties": false,
+			"required": []string{
+				"title",
+				"statement",
+				"constraints",
+				"examples",
+				"edge_cases",
+			},
+			"properties": map[string]any{
+				"title": map[string]any{
+					"type": "string",
+				},
+				"statement": map[string]any{
+					"type": "string",
+				},
+				"constraints": map[string]any{
+					"type":  "array",
+					"items": map[string]any{"type": "string"},
+				},
+				"examples": map[string]any{
+					"type":  "array",
+					"items": exampleJSONSchema,
+				},
+				"edge_cases": map[string]any{
+					"type":  "array",
+					"items": map[string]any{"type": "string"},
+				},
+			},
+		},
+		"api": map[string]any{
+			"type":                 "object",
+			"additionalProperties": false,
+			"required": []string{
+				"function_name",
+				"signature",
+				"params",
+				"returns",
+			},
+			"properties": map[string]any{
+				"function_name": map[string]any{
+					"type": "string",
+				},
+				"signature": map[string]any{
+					"type": "string",
+				},
+				"params": map[string]any{
+					"type": "array",
+					"items": map[string]any{
+						"type":                 "object",
+						"additionalProperties": false,
+						"required":             []string{"name", "type", "desc"},
+						"properties": map[string]any{
+							"name": map[string]any{"type": "string"},
+							"type": map[string]any{"type": "string"},
+							"desc": map[string]any{"type": "string"},
+						},
+					},
+				},
+				"returns": map[string]any{
+					"type":                 "object",
+					"additionalProperties": false,
+					"required":             []string{"type", "desc"},
+					"properties": map[string]any{
+						"type": map[string]any{"type": "string"},
+						"desc": map[string]any{"type": "string"},
+					},
+				},
+			},
+		},
+		"time_estimate_minutes": map[string]any{
+			"type":    "integer",
+			"minimum": 1,
+			"maximum": 120,
+		},
+		"hint": map[string]any{
+			"type": "string",
+		},
+		"solutions": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type":                 "object",
+				"additionalProperties": false,
+				"required": []string{
+					"approach",
+					"complexity",
+					"code",
+				},
+				"properties": map[string]any{
+					"approach": map[string]any{"type": "string"},
+					"complexity": map[string]any{
+						"type":                 "object",
+						"additionalProperties": false,
+						"required":             []string{"time", "space"},
+						"properties": map[string]any{
+							"time":  map[string]any{"type": "string"},
+							"space": map[string]any{"type": "string"},
+						},
+					},
+					"code": map[string]any{"type": "string"},
+				},
+			},
+		},
+		"tests": map[string]any{
+			"type":                 "object",
+			"additionalProperties": false,
+			"required":             []string{"public", "hidden"},
+			"properties": map[string]any{
+				"public": map[string]any{
+					"type":  "array",
+					"items": exampleJSONSchema,
+				},
+				"hidden": map[string]any{
+					"type":  "array",
+					"items": exampleJSONSchema,
+				},
+			},
+		},
+	},
+	"$defs": map[string]any{
+		"json_value": jsonValueSchema,
+	},
+}
+
+func newProblemPackResponseFormat() responseFormat {
+	return responseFormat{
+		Type: "json_schema",
+		JSONSchema: &responseJSONSchema{
+			Name:   "problem_pack",
+			Strict: true,
+			Schema: problemPackJSONSchema,
+		},
+	}
+}
+
 // LLMProblemGenerator talks to an LLM provider to create fresh problem packs.
 type LLMProblemGenerator struct {
 	client      *http.Client
@@ -100,7 +284,7 @@ func (g *LLMProblemGenerator) Generate(ctx context.Context, req api.GenerateRequ
 
 	payload := chatCompletionRequest{
 		Model:          model,
-		ResponseFormat: responseFormat{Type: "json_object"},
+		ResponseFormat: newProblemPackResponseFormat(),
 		Temperature:    g.temperature,
 		Messages: []chatMessage{
 			{Role: "system", Content: g.systemPrompt(category, difficulty, provider)},
@@ -231,8 +415,15 @@ func llmDebugEnabled() bool {
 	return strings.TrimSpace(os.Getenv("CI_SMOKE_DEBUG")) != ""
 }
 
+type responseJSONSchema struct {
+	Name   string         `json:"name"`
+	Strict bool           `json:"strict"`
+	Schema map[string]any `json:"schema"`
+}
+
 type responseFormat struct {
-	Type string `json:"type"`
+	Type       string              `json:"type"`
+	JSONSchema *responseJSONSchema `json:"json_schema,omitempty"`
 }
 
 type chatMessage struct {
