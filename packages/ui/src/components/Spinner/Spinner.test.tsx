@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { Spinner } from './Spinner';
 
@@ -18,9 +18,11 @@ describe('Spinner', () => {
   });
 
   it('supports tone variants', () => {
-    const { container, rerender } = render(<Spinner />);
-    expect(container.querySelector('span')).toHaveClass('border-border-subtle');
+    const { rerender } = render(<Spinner />);
+    const [ring] = within(screen.getByRole('status')).getAllByRole('generic');
+    expect(ring).toHaveClass('border-border-subtle');
     rerender(<Spinner tone="accent" />);
-    expect(container.querySelector('span')).toHaveClass('border-accent');
+    const [accentRing] = within(screen.getByRole('status')).getAllByRole('generic');
+    expect(accentRing).toHaveClass('border-accent');
   });
 });

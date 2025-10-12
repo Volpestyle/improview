@@ -18,13 +18,14 @@ const googleScopesContext =
 const googleScopes = Array.isArray(googleScopesContext)
   ? googleScopesContext
   : googleScopesContext?.split(/[\s,]+/).filter((scope) => scope.length > 0);
+const resolvedGoogleScopes = googleScopes && googleScopes.length > 0 ? googleScopes : undefined;
 
 const authStack = new AuthStack(app, `Improview-${envName}-Auth`, {
   envName,
   domainPrefix: authDomainPrefix,
   googleClientId: googleClientId?.trim() || undefined,
   googleClientSecret: googleClientSecret?.trim() || undefined,
-  googleScopes,
+  googleScopes: resolvedGoogleScopes,
 });
 
 const backendStack = new BackendStack(app, `Improview-${envName}-Backend`, {

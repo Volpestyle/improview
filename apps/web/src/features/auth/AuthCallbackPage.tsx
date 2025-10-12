@@ -1,11 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { Card, Spinner } from '@improview/ui';
-import {
-  AUTH_SESSION_KEYS,
-  authService,
-  composeAuthUser,
-} from '../../services/authService';
+import { AUTH_SESSION_KEYS, authService, composeAuthUser } from '../../services/authService';
 import { useAuthStore } from '../../state/authStore';
 
 type CallbackPageProps = {
@@ -100,7 +96,9 @@ export const AuthCallbackPage = ({ code, state, error, errorDescription }: Callb
       } catch (err) {
         console.error('Failed to exchange authorization code', err);
         setStatus('error');
-        setMessage(err instanceof Error ? err.message : 'Failed to complete sign-in. Please try again.');
+        setMessage(
+          err instanceof Error ? err.message : 'Failed to complete sign-in. Please try again.',
+        );
         sessionStorage.removeItem(AUTH_SESSION_KEYS.codeVerifier);
         sessionStorage.removeItem(AUTH_SESSION_KEYS.state);
         sessionStorage.removeItem(AUTH_SESSION_KEYS.redirect);
@@ -134,7 +132,7 @@ export const AuthCallbackPage = ({ code, state, error, errorDescription }: Callb
             type="button"
             className="text-sm font-medium text-accent underline"
             onClick={() => {
-              void navigate({ to: '/auth/login', replace: true });
+              void navigate({ to: '/auth/login', replace: true, search: { redirect: '/' } });
             }}
           >
             Return to sign-in

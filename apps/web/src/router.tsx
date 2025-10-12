@@ -45,7 +45,11 @@ const AppLayout = () => {
           </Link>
           <div className="flex items-center gap-2">
             <nav className="flex items-center gap-4 text-sm">
-              <Link to="/" activeProps={{ className: 'text-accent' }} className="text-fg-muted hover:text-fg">
+              <Link
+                to="/"
+                activeProps={{ className: 'text-accent' }}
+                className="text-fg-muted hover:text-fg"
+              >
                 Workspace
               </Link>
               <Link
@@ -121,7 +125,7 @@ const workspaceRoute = new Route({
     await requireAuth(location.href);
   },
   loader: async ({ params, context }) => {
-    const { apiClient, queryClient } = context as AppRouterContext;
+    const { apiClient, queryClient } = context as unknown as AppRouterContext;
     const attemptResponse = await apiClient.getAttempt(params.attemptId);
     queryClient.setQueryData(['attempt', params.attemptId], attemptResponse.attempt);
     queryClient.setQueryData(['runs', params.attemptId], attemptResponse.runs);
@@ -143,7 +147,7 @@ const resultsRoute = new Route({
     await requireAuth(location.href);
   },
   loader: async ({ params, context }) => {
-    const { apiClient, queryClient } = context as AppRouterContext;
+    const { apiClient, queryClient } = context as unknown as AppRouterContext;
     const attemptResponse = await apiClient.getAttempt(params.attemptId);
     const { attempt, runs } = attemptResponse;
     queryClient.setQueryData(['attempt', params.attemptId], attempt);
@@ -188,7 +192,14 @@ const historyRoute = new Route({
   component: HistoryPage,
 });
 
-const routeTree = rootRoute.addChildren([loginRoute, callbackRoute, indexRoute, workspaceRoute, resultsRoute, historyRoute]);
+const routeTree = rootRoute.addChildren([
+  loginRoute,
+  callbackRoute,
+  indexRoute,
+  workspaceRoute,
+  resultsRoute,
+  historyRoute,
+]);
 
 export const router = new Router({
   routeTree,
@@ -212,7 +223,9 @@ function LoginRouteComponent() {
 
 function AuthCallbackRouteComponent() {
   const { code, state, error, error_description: errorDescription } = callbackRoute.useSearch();
-  return <AuthCallbackPage code={code} state={state} error={error} errorDescription={errorDescription} />;
+  return (
+    <AuthCallbackPage code={code} state={state} error={error} errorDescription={errorDescription} />
+  );
 }
 
 const REFRESH_THRESHOLD_MS = 60_000;

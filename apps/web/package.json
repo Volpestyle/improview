@@ -5,7 +5,6 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:live": "VITE_API_MODE=live vite",
     "build": "tsc --project tsconfig.build.json && vite build",
     "preview": "vite preview",
     "lint": "eslint src --ext .ts,.tsx",

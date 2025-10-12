@@ -3,8 +3,9 @@ package app
 import "testing"
 
 func TestConfigureAuthenticatorFromEnvDisabledByDefault(t *testing.T) {
-	t.Setenv("COGNITO_USER_POOL_ID", "")
-	t.Setenv("COGNITO_APP_CLIENT_IDS", "")
+	t.Setenv("USER_POOL_ID", "")
+	t.Setenv("USER_POOL_CLIENT_ID", "")
+	t.Setenv("USER_POOL_CLIENT_IDS", "")
 
 	authenticator, err := configureAuthenticatorFromEnv()
 	if err != nil {
@@ -15,9 +16,10 @@ func TestConfigureAuthenticatorFromEnvDisabledByDefault(t *testing.T) {
 	}
 }
 
-func TestConfigureAuthenticatorFromEnvUsesCognitoVars(t *testing.T) {
-	t.Setenv("COGNITO_USER_POOL_ID", "us-east-1_example")
-	t.Setenv("COGNITO_APP_CLIENT_IDS", "client-123")
+func TestConfigureAuthenticatorFromEnvUsesNewVars(t *testing.T) {
+	t.Setenv("USER_POOL_ID", "us-east-1_example")
+	t.Setenv("USER_POOL_CLIENT_ID", "client-123")
+	t.Setenv("USER_POOL_CLIENT_IDS", "")
 	t.Setenv("COGNITO_REGION", "")
 	t.Setenv("AWS_REGION", "")
 	t.Setenv("AWS_DEFAULT_REGION", "")
@@ -32,8 +34,9 @@ func TestConfigureAuthenticatorFromEnvUsesCognitoVars(t *testing.T) {
 }
 
 func TestConfigureAuthenticatorFromEnvRequiresClientID(t *testing.T) {
-	t.Setenv("COGNITO_USER_POOL_ID", "us-east-1_example")
-	t.Setenv("COGNITO_APP_CLIENT_IDS", "")
+	t.Setenv("USER_POOL_ID", "us-east-1_example")
+	t.Setenv("USER_POOL_CLIENT_ID", "")
+	t.Setenv("USER_POOL_CLIENT_IDS", "")
 
 	if _, err := configureAuthenticatorFromEnv(); err == nil {
 		t.Fatalf("expected error when user pool is set without client ids")

@@ -7,6 +7,17 @@ import { ApiError } from '../../api/errors';
 import { GenerateRequest } from '../../api/types';
 import { recordAttemptStart } from '../../storage/history';
 
+const API_MODES = ['static', 'llm'] as const;
+type ApiMode = (typeof API_MODES)[number];
+
+const configuredApiMode: ApiMode | undefined = (() => {
+  const raw = (import.meta.env.VITE_API_MODE as string | undefined)?.toLowerCase();
+  if (!raw) {
+    return undefined;
+  }
+  return API_MODES.find((mode) => mode === raw) ?? undefined;
+})();
+
 const categoryOptions = [
   { value: 'arrays', label: 'Arrays' },
   { value: 'bfs', label: 'BFS / DFS' },
@@ -51,6 +62,9 @@ export const HomePage = () => {
       };
       if (customPrompt.trim()) {
         payload.customPrompt = customPrompt.trim();
+      }
+      if (configuredApiMode) {
+        payload.mode = configuredApiMode;
       }
 
       const generateResponse = await apiClient.generate(payload);

@@ -121,7 +121,10 @@ export const useAuthStore = create<AuthState>()(
         refreshPromise = (async () => {
           const result = await authService.refreshWithToken(refreshToken);
           const expiresAt = result.expiresIn ? Date.now() + result.expiresIn * 1000 : null;
-          const nextUser = composeAuthUser({ idToken: result.idToken, fallbackUsername: user?.username });
+          const nextUser = composeAuthUser({
+            idToken: result.idToken,
+            fallbackUsername: user?.username,
+          });
 
           set({
             accessToken: result.accessToken,
@@ -192,20 +195,16 @@ export const waitForAuthHydration = async () => {
       console.warn('Failed to hydrate auth state from storage', error);
     } finally {
       useAuthStore.getState().setHydrated();
-      return;
     }
+    return;
   }
 
   await new Promise<void>((resolve) => {
-    const unsubscribe = useAuthStore.subscribe(
-      (state) => state.hasHydrated,
-      (hasHydrated) => {
-        if (hasHydrated) {
-          unsubscribe();
-          resolve();
-        }
-      },
-      { fireImmediately: true },
-    );
+    const unsubscribe = useAuthStore.subscribe((state: AuthState) => {
+      if (state.hasHydrated) {
+        unsubscribe();
+        resolve();
+      }
+    });
   });
 };

@@ -40,9 +40,6 @@ const buildDefaultSource = (pack: ProblemPack) => {
   return `${signature}\n  // TODO: implement\n  return null;\n${closing}\n`;
 };
 
-const formatTestResult = (result: RunResult) =>
-  result.status === 'passed' ? 'Passed' : result.message ?? 'Failed';
-
 export const WorkspacePage = ({ attempt, runs, problem }: WorkspacePageProps) => {
   const defaultSource = useMemo(() => buildDefaultSource(problem), [problem]);
   const [code, setCode] = usePersistedState<string>(

@@ -21,7 +21,7 @@ export interface ApiClient {
   getProblem(problemId: string): Promise<ProblemPack>;
 }
 
-const DEFAULT_API_BASE_URL = 'http://localhost:8080';
+const DEFAULT_API_BASE_URL = '';
 
 export const createApiClient = (): ApiClient => {
   const overrideBase = import.meta.env.VITE_API_BASE_URL as string | undefined;

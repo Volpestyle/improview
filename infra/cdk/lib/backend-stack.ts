@@ -63,8 +63,8 @@ export class BackendStack extends Stack {
         TABLE_NAME: mainTable.tableName,
         ARTIFACT_BUCKET: artifactsBucket.bucketName,
         PROVIDER_SECRET_ARN: props.providerSecret?.secretArn ?? '',
-        COGNITO_USER_POOL_ID: props.userPool?.userPoolId ?? '',
-        COGNITO_APP_CLIENT_IDS: props.userPoolClient?.userPoolClientId ?? '',
+        USER_POOL_ID: props.userPool?.userPoolId ?? '',
+        USER_POOL_CLIENT_ID: props.userPoolClient?.userPoolClientId ?? '',
       },
       code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', '..', 'backend'), {
         bundling: {

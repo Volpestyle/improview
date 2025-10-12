@@ -84,15 +84,14 @@ func NewServicesFromEnv(clock api.Clock) (api.Services, error) {
 }
 
 func configureAuthenticatorFromEnv() (auth.Authenticator, error) {
-	userPoolID := strings.TrimSpace(os.Getenv("COGNITO_USER_POOL_ID"))
+	userPoolID := strings.TrimSpace(os.Getenv("USER_POOL_ID"))
 	if userPoolID == "" {
 		return nil, nil
 	}
 
-	clientIDs := splitCSV(os.Getenv("COGNITO_APP_CLIENT_IDS"))
-	clientIDs = uniqueStrings(clientIDs)
+	clientIDs := gatherUserPoolClientIDs()
 	if len(clientIDs) == 0 {
-		return nil, fmt.Errorf("cognito auth: at least one app client id is required (set COGNITO_APP_CLIENT_IDS)")
+		return nil, fmt.Errorf("cognito auth: at least one app client id is required (set USER_POOL_CLIENT_ID or USER_POOL_CLIENT_IDS)")
 	}
 
 	cfg := auth.CognitoConfig{
@@ -187,6 +186,24 @@ func uniqueStrings(values []string) []string {
 		results = append(results, val)
 	}
 	return results
+}
+
+func gatherUserPoolClientIDs() []string {
+	var combined []string
+	if id := firstNonEmpty(os.Getenv("USER_POOL_CLIENT_ID")); id != "" {
+		combined = append(combined, id)
+	}
+	combined = append(combined, splitCSV(os.Getenv("USER_POOL_CLIENT_IDS"))...)
+	return uniqueStrings(combined)
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func newServices(clock api.Clock, options ServicesOptions) (api.Services, error) {

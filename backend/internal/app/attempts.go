@@ -67,7 +67,7 @@ func (s *MemoryAttemptStore) Create(ctx context.Context, req api.CreateAttemptRe
 	}
 
 	s.attempts[id] = attempt
-	s.runs[id] = nil
+	s.runs[id] = make([]domain.RunResult, 0)
 	return attempt, nil
 }
 
@@ -142,6 +142,9 @@ func (s *MemoryAttemptStore) Get(_ context.Context, attemptID string) (domain.At
 	}
 
 	runs := append([]domain.RunResult(nil), s.runs[attemptID]...)
+	if runs == nil {
+		runs = make([]domain.RunResult, 0)
+	}
 	return attempt, runs, nil
 }
 

@@ -11,6 +11,7 @@ npm-debug.log
 # Local environment files
 .env
 .env.*
+!.env.example
 backend/.env
 backend/.env.*
 backend/tmp/

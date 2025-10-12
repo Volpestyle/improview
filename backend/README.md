@@ -59,13 +59,14 @@ When `OPENAI_API_KEY` is present the live LLM generator becomes available. Stati
 
 | Variable | Description | Required |
 | --- | --- | --- |
-| `COGNITO_USER_POOL_ID` | Cognito User Pool ID. Enabling this turns auth on. | Yes (secured) |
-| `COGNITO_APP_CLIENT_IDS` | Comma-separated list of allowed app client IDs. | Yes (secured) |
+| `USER_POOL_ID` | Cognito User Pool ID. Enabling this turns auth on. | Yes (secured) |
+| `USER_POOL_CLIENT_ID` | Primary Cognito App Client ID allowed to call the API. | Yes (secured) |
+| `USER_POOL_CLIENT_IDS` | Additional comma-separated client IDs (optional). | No |
 | `COGNITO_REGION` | Override region parsed from the pool ID. | No |
 | `COGNITO_JWKS_URL` | Custom JWKS URL (defaults to Cognito discovery). | No |
 | `COGNITO_JWKS_CACHE_TTL_SECONDS` | Cache TTL for downloaded JWKS keys. | No |
 
-> The CDK stack automatically injects `COGNITO_USER_POOL_ID` and `COGNITO_APP_CLIENT_IDS` into the Lambda runtime, so deployed stacks stay authenticated without extra configuration.
+> The CDK stack automatically injects `USER_POOL_ID`, `USER_POOL_CLIENT_ID`, and `PROVIDER_SECRET_ARN` into the Lambda runtime, so deployed stacks stay authenticated without extra configuration. Legacy variables prefixed with `COGNITO_` are still honoured for backward compatibility.
 
 ## Smoke Tests
 
@@ -77,6 +78,7 @@ Store the Cognito smoke-test credentials in AWS Secrets Manager so local runs an
 export SMOKE_USER="smoke-tester@example.com"
 export SMOKE_PASSWORD="$(openssl rand -base64 24)"
 export USER_POOL_ID="us-east-1_example" # replace with your Cognito user pool ID
+export USER_POOL_CLIENT_ID="your-app-client-id"
 ```
 
 Create (or recreate) the Cognito smoke user and set its password to permanent so the `USER_PASSWORD_AUTH` flow succeeds:
@@ -135,7 +137,7 @@ If you ever need to run the flow manually, obtain a token with:
 ```bash
 SMOKE_TOKEN=$(aws cognito-idp initiate-auth \
   --region us-east-1 \
-  --client-id "$(echo "$COGNITO_APP_CLIENT_IDS" | tr ',' '\n' | head -n1 | xargs)" \
+  --client-id "${USER_POOL_CLIENT_ID:-$(echo "$USER_POOL_CLIENT_IDS" | tr ',' '\n' | head -n1 | xargs)}" \
   --auth-flow USER_PASSWORD_AUTH \
   --auth-parameters USERNAME=$SMOKE_USER,PASSWORD=$SMOKE_PASSWORD \
   --query 'AuthenticationResult.AccessToken' \

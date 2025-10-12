@@ -56,6 +56,7 @@ export const GenerateRequestSchema = z.object({
   difficulty: z.string(),
   customPrompt: z.string().optional(),
   provider: z.string().optional(),
+  mode: z.enum(['static', 'llm']).optional(),
 });
 
 export type GenerateRequest = z.infer<typeof GenerateRequestSchema>;

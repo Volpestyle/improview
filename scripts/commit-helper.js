@@ -5,6 +5,19 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { spawnSync } = require('child_process');
+const { createLogger } = require('./lib/node/logging');
+const { parseArgs } = require('./lib/node/cli');
+
+const logger = createLogger();
+
+const ARG_SPEC = {
+  preview: { type: 'bool', alias: ['p'], default: false },
+  planFile: { type: 'string', flag: 'plan-file' },
+  skipPush: { type: 'bool', flag: 'skip-push', default: false },
+  dryRun: { type: 'bool', flag: 'dry-run', default: false },
+  remote: { type: 'string', default: 'origin' },
+  help: { type: 'bool', alias: ['h'], default: false },
+};
 
 function printUsage() {
   console.log(`Usage: node ./scripts/commit-helper.js [options]
@@ -18,78 +31,6 @@ Options:
   -h, --help               Show this help message.`);
 }
 
-function parseArgs(argv) {
-  const options = {
-    preview: false,
-    planFile: null,
-    skipPush: false,
-    dryRun: false,
-    remote: 'origin',
-    help: false,
-  };
-
-  const args = argv.slice(2);
-  let helpRequested = false;
-
-  for (let i = 0; i < args.length; i += 1) {
-    const arg = args[i];
-    if (arg === '--preview' || arg === '-p') {
-      options.preview = true;
-    } else if (arg.startsWith('--plan-file=')) {
-      options.planFile = arg.slice('--plan-file='.length);
-    } else if (arg === '--plan-file') {
-      i += 1;
-      if (i >= args.length) {
-        throw new Error('--plan-file requires a value.');
-      }
-      options.planFile = args[i];
-    } else if (arg === '--skip-push') {
-      options.skipPush = true;
-    } else if (arg === '--dry-run') {
-      options.dryRun = true;
-    } else if (arg.startsWith('--remote=')) {
-      options.remote = arg.slice('--remote='.length);
-    } else if (arg === '--remote') {
-      i += 1;
-      if (i >= args.length) {
-        throw new Error('--remote requires a value.');
-      }
-      options.remote = args[i];
-    } else if (arg === '--help' || arg === '-h') {
-      helpRequested = true;
-    } else {
-      throw new Error(`Unknown argument: ${arg}`);
-    }
-  }
-
-  if (helpRequested) {
-    options.help = true;
-    return options;
-  }
-
-  if (!options.preview && !options.planFile) {
-    options.preview = true;
-  }
-
-  if (options.preview && options.planFile) {
-    throw new Error('Cannot use --preview with --plan-file.');
-  }
-
-  if (options.preview && (options.skipPush || options.dryRun || options.remote !== 'origin')) {
-    throw new Error('--skip-push, --dry-run, and --remote require --plan-file.');
-  }
-
-  if (options.planFile && options.planFile.trim() === '') {
-    throw new Error('--plan-file requires a non-empty path.');
-  }
-
-  if (options.remote.trim() === '') {
-    throw new Error('--remote requires a non-empty name.');
-  }
-
-  return options;
-}
-
 let currentOptions = null;
 
 function runGit(args, config = {}) {
@@ -100,7 +41,7 @@ function runGit(args, config = {}) {
   }
 
   if (currentOptions.dryRun && dryAction) {
-    console.log(`[DRY-RUN] git ${args.join(' ')}`);
+    logger.info(`[DRY-RUN] git ${args.join(' ')}`);
     return '';
   }
 
@@ -122,8 +63,8 @@ function runGit(args, config = {}) {
 }
 
 function runSection(title, producer) {
-  console.log('');
-  console.log(`=== ${title} ===`);
+  logger.raw('');
+  logger.step(title);
   let result;
   try {
     result = producer();
@@ -132,29 +73,29 @@ function runSection(title, producer) {
   }
 
   if (result === undefined || result === null) {
-    console.log('(no output)');
+    logger.raw('(no output)');
     return;
   }
 
   if (Array.isArray(result)) {
     if (result.length === 0) {
-      console.log('(no output)');
+      logger.raw('(no output)');
     } else {
-      console.log(result.join('\n'));
+      logger.raw(result.join('\n'));
     }
     return;
   }
 
   if (typeof result === 'string') {
     if (result.trim() === '') {
-      console.log('(no output)');
+      logger.raw('(no output)');
     } else {
-      console.log(result);
+      logger.raw(result);
     }
     return;
   }
 
-  console.log(String(result));
+  logger.raw(String(result));
 }
 
 function getCurrentBranch() {
@@ -164,7 +105,7 @@ function getCurrentBranch() {
 
 function showPreview() {
   const branch = getCurrentBranch();
-  console.log(`Current branch: ${branch}`);
+  logger.info(`Current branch: ${branch}`);
 
   runSection('git status --short --branch', () =>
     runGit(['status', '--short', '--branch'], { allowEmptyOutput: true })
@@ -292,18 +233,18 @@ function applyPlan(planFilePath) {
 
   const status = runGit(['status', '--porcelain'], { allowEmptyOutput: true }).trim();
   if (status === '') {
-    console.log('Working tree is clean. Nothing to commit.');
+    logger.success('Working tree is clean. Nothing to commit.');
     return;
   }
 
   ensureNoStagedChanges();
 
   const initialBranch = getCurrentBranch();
-  console.log(`Applying plan with ${plan.length} commit(s) on branch ${initialBranch}`);
+  logger.step(`Applying plan with ${plan.length} commit(s) on branch ${initialBranch}`);
 
   for (const entry of plan) {
-    console.log('');
-    console.log(`>> Preparing commit: ${entry.title}`);
+    logger.raw('');
+    logger.step(`Preparing commit: ${entry.title}`);
 
     runGit(['reset'], { dryAction: true });
 
@@ -324,13 +265,13 @@ function applyPlan(planFilePath) {
         entry.paths.length === 1 && entry.paths[0].toLowerCase() === 'all'
           ? '(all changes in working tree)'
           : entry.paths.join('\n');
-      console.log(`Staged files (simulated):\n${stagedDescription}`);
+      logger.info(`Staged files (simulated):\n${stagedDescription}`);
     } else {
       const stagedFiles = runGit(['diff', '--cached', '--name-status'], { allowEmptyOutput: true });
       if (stagedFiles.trim() === '') {
         throw new Error(`No files staged for commit "${entry.title}". Ensure the paths are correct.`);
       }
-      console.log(`Staged files:\n${stagedFiles}`);
+      logger.info(`Staged files:\n${stagedFiles}`);
     }
 
     const messageLines = [entry.title];
@@ -342,7 +283,7 @@ function applyPlan(planFilePath) {
     }
 
     if (currentOptions.dryRun) {
-      console.log(`[DRY-RUN] git commit --file <temporary-message>`);
+      logger.info('[DRY-RUN] git commit --file <temporary-message>');
       continue;
     }
 
@@ -355,41 +296,79 @@ function applyPlan(planFilePath) {
   }
 
   if (currentOptions.skipPush) {
-    console.log('Skipping push as requested.');
+    logger.info('Skipping push as requested.');
   } else if (currentOptions.dryRun) {
-    console.log(`[DRY-RUN] git push ${currentOptions.remote} ${getCurrentBranch()}`);
+    logger.info(`[DRY-RUN] git push ${currentOptions.remote} ${getCurrentBranch()}`);
   } else {
     const branch = getCurrentBranch();
-    console.log('');
-    console.log(`Pushing branch ${branch} to ${currentOptions.remote}`);
+    logger.raw('');
+    logger.step(`Pushing branch ${branch} to ${currentOptions.remote}`);
     runGit(['push', currentOptions.remote, branch]);
   }
 
   if (currentOptions.dryRun) {
-    console.log('Dry run complete. Working tree state not changed.');
+    logger.info('Dry run complete. Working tree state not changed.');
     return;
   }
 
   const remaining = runGit(['status', '--short'], { allowEmptyOutput: true }).trim();
   if (remaining !== '') {
-    console.warn(`Working tree is not clean after applying the plan:\n${remaining}`);
+    logger.warn(`Working tree is not clean after applying the plan:\n${remaining}`);
   } else {
-    console.log('All done. Working tree is clean.');
+    logger.success('All done. Working tree is clean.');
   }
 }
 
 function main() {
-  let options;
+  let parsed;
   try {
-    options = parseArgs(process.argv);
+    parsed = parseArgs(process.argv.slice(2), ARG_SPEC, {
+      allowPositionals: false,
+      parserName: 'commit-helper',
+    });
   } catch (error) {
-    console.error(error.message || error);
+    logger.error(error.message || error);
     process.exit(1);
+  }
+
+  const { values, seen } = parsed;
+
+  const options = {
+    preview: Boolean(values.preview),
+    planFile: values.planFile,
+    skipPush: Boolean(values.skipPush),
+    dryRun: Boolean(values.dryRun),
+    remote: values.remote,
+    help: Boolean(values.help),
+  };
+
+  if (!seen.preview && !options.planFile) {
+    options.preview = true;
   }
 
   if (options.help) {
     printUsage();
     return;
+  }
+
+  if (options.preview && options.planFile) {
+    logger.error('Cannot use --preview with --plan-file.');
+    process.exit(1);
+  }
+
+  if (options.preview && (options.skipPush || options.dryRun || options.remote !== 'origin')) {
+    logger.error('--skip-push, --dry-run, and --remote require --plan-file.');
+    process.exit(1);
+  }
+
+  if (options.planFile && options.planFile.trim() === '') {
+    logger.error('--plan-file requires a non-empty path.');
+    process.exit(1);
+  }
+
+  if (options.remote.trim() === '') {
+    logger.error('--remote requires a non-empty name.');
+    process.exit(1);
   }
 
   currentOptions = options;
@@ -403,7 +382,7 @@ function main() {
       throw new Error('No operation specified.');
     }
   } catch (error) {
-    console.error(error.message || error);
+    logger.error(error.message || error);
     process.exit(1);
   }
 }

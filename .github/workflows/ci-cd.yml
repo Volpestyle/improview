@@ -31,9 +31,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: pnpm
       - name: Set up pnpm
-        run: corepack prepare pnpm@9.0.0 --activate
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9.0.0
+          run_install: false
       - name: Install CDK CLI
         run: npm install -g aws-cdk@2
       - name: Install dependencies
@@ -69,22 +71,22 @@ jobs:
       contents: read
       id-token: write
     env:
-      AWS_REGION: ${{ vars.AWS_REGION }}
-      S3_BUCKET: ${{ vars.AWS_S3_BUCKET }}
-      CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.AWS_CLOUDFRONT_DISTRIBUTION_ID }}
-      FRONTEND_BUILD_DIR: ${{ vars.FRONTEND_BUILD_DIR }}
-      IMPROVIEW_ENV: ${{ vars.IMPROVIEW_ENV }}
-      BASE_URL: ${{ vars.BASE_URL }}
-      GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
-      GOOGLE_CLIENT_SCOPES: ${{ vars.GOOGLE_CLIENT_SCOPES }}
+      AWS_REGION: ${{ secrets.AWS_REGION != '' && secrets.AWS_REGION || vars.AWS_REGION }}
+      FRONTEND_BUILD_DIR: ${{ secrets.FRONTEND_BUILD_DIR != '' && secrets.FRONTEND_BUILD_DIR || vars.FRONTEND_BUILD_DIR }}
+      IMPROVIEW_ENV: ${{ secrets.IMPROVIEW_ENV != '' && secrets.IMPROVIEW_ENV || vars.IMPROVIEW_ENV }}
+      BASE_URL: ${{ secrets.BASE_URL != '' && secrets.BASE_URL || vars.BASE_URL }}
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID != '' && secrets.GOOGLE_CLIENT_ID || vars.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SCOPES: ${{ secrets.GOOGLE_CLIENT_SCOPES != '' && secrets.GOOGLE_CLIENT_SCOPES || vars.GOOGLE_CLIENT_SCOPES }}
       GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-      COGNITO_APP_CLIENT_IDS: ${{ secrets.COGNITO_APP_CLIENT_IDS != '' && secrets.COGNITO_APP_CLIENT_IDS || vars.COGNITO_APP_CLIENT_IDS }}
+      USER_POOL_ID: ${{ secrets.USER_POOL_ID != '' && secrets.USER_POOL_ID || vars.USER_POOL_ID }}
+      USER_POOL_CLIENT_ID: ${{ secrets.USER_POOL_CLIENT_ID != '' && secrets.USER_POOL_CLIENT_ID || vars.USER_POOL_CLIENT_ID }}
+      USER_POOL_CLIENT_IDS: ${{ secrets.USER_POOL_CLIENT_IDS != '' && secrets.USER_POOL_CLIENT_IDS || secrets.COGNITO_APP_CLIENT_IDS != '' && secrets.COGNITO_APP_CLIENT_IDS || vars.USER_POOL_CLIENT_IDS }}
       AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      SMOKE_USER: ${{ secrets.SMOKE_USER != '' && secrets.SMOKE_USER || vars.SMOKE_USER != '' && vars.SMOKE_USER || 'smoke-tester@improview.dev' }}
-      SMOKE_SECRET_NAME: ${{ vars.SMOKE_SECRET_NAME != '' && vars.SMOKE_SECRET_NAME || (vars.IMPROVIEW_ENV != '' && format('improview/{0}/smoke-credentials', vars.IMPROVIEW_ENV) || 'improview/dev/smoke-credentials') }}
-      SMOKE_SECRET_DESCRIPTION: ${{ vars.SMOKE_SECRET_DESCRIPTION != '' && vars.SMOKE_SECRET_DESCRIPTION || 'Cognito smoke-test credentials' }}
+      SMOKE_USER: ${{ 'smoke-tester@improview.dev' }}
+      SMOKE_SECRET_NAME: ${{ (vars.IMPROVIEW_ENV != '' && format('improview/{0}/smoke-credentials', vars.IMPROVIEW_ENV) || 'improview/dev/smoke-credentials') }}
+      SMOKE_SECRET_DESCRIPTION: ${{ 'Cognito smoke-test credentials' }}
     steps:
       - name: Determine deployment eligibility
         id: deployment_guard
@@ -104,7 +106,10 @@ jobs:
           node-version: 20
       - name: Set up pnpm
         if: steps.deployment_guard.outputs.should_deploy == 'true'
-        run: corepack prepare pnpm@9.0.0 --activate
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9.0.0
+          run_install: false
       - name: Install CDK CLI
         if: steps.deployment_guard.outputs.should_deploy == 'true'
         run: npm install -g aws-cdk@2
@@ -177,21 +182,63 @@ jobs:
           echo "Resolved Cognito User Pool: ${user_pool_id}"
           echo "Resolved Cognito Client: ${client_id}"
           {
+            echo "USER_POOL_ID=${user_pool_id}"
+            echo "USER_POOL_CLIENT_ID=${client_id}"
+            echo "USER_POOL_CLIENT_IDS=${client_id}"
             echo "COGNITO_USER_POOL_ID=${user_pool_id}"
             echo "COGNITO_APP_CLIENT_IDS=${client_id}"
+          } >> "${GITHUB_ENV}"
+      - name: Resolve frontend outputs
+        if: steps.deployment_guard.outputs.should_deploy == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          env_name="${IMPROVIEW_ENV:-dev}"
+          region="${AWS_REGION:-us-east-1}"
+          frontend_stack="Improview-${env_name}-Frontend"
+          echo "Resolving frontend outputs from ${frontend_stack} in ${region}..."
+          bucket="$(aws cloudformation describe-stacks \
+            --region "${region}" \
+            --stack-name "${frontend_stack}" \
+            --query "Stacks[0].Outputs[?OutputKey=='SiteBucketName'].OutputValue" \
+            --output text)"
+          distribution_id="$(aws cloudformation describe-stacks \
+            --region "${region}" \
+            --stack-name "${frontend_stack}" \
+            --query "Stacks[0].Outputs[?OutputKey=='DistributionId'].OutputValue" \
+            --output text)"
+          distribution_domain="$(aws cloudformation describe-stacks \
+            --region "${region}" \
+            --stack-name "${frontend_stack}" \
+            --query "Stacks[0].Outputs[?OutputKey=='DistributionDomain'].OutputValue" \
+            --output text)"
+          if [ -z "${bucket}" ] || [ "${bucket}" = "None" ]; then
+            echo "SiteBucketName output missing for ${frontend_stack}." >&2
+            exit 1
+          fi
+          if [ -z "${distribution_id}" ] || [ "${distribution_id}" = "None" ]; then
+            echo "DistributionId output missing for ${frontend_stack}." >&2
+            exit 1
+          fi
+          echo "Resolved frontend bucket: ${bucket}"
+          echo "Resolved CloudFront distribution: ${distribution_id}"
+          {
+            echo "S3_BUCKET=${bucket}"
+            echo "CLOUDFRONT_DISTRIBUTION_ID=${distribution_id}"
+            echo "CLOUDFRONT_DOMAIN=${distribution_domain}"
           } >> "${GITHUB_ENV}"
       - name: Ensure smoke-test Cognito user
         if: steps.deployment_guard.outputs.should_deploy == 'true'
         env:
-          NO_COLOR: "1"
+          NO_COLOR: '1'
         shell: bash
         run: |
           set -euo pipefail
-          if [ "${COGNITO_USER_POOL_ID:-}" = "" ]; then
-            echo "Smoke user setup failed; COGNITO_USER_POOL_ID is required." >&2
+          if [ "${USER_POOL_ID:-}" = "" ]; then
+            echo "Smoke user setup failed; USER_POOL_ID is required." >&2
             exit 1
           fi
-          args=(--env "${IMPROVIEW_ENV:-dev}" --user "${SMOKE_USER}" --user-pool-id "${COGNITO_USER_POOL_ID}")
+          args=(--env "${IMPROVIEW_ENV:-dev}" --user "${SMOKE_USER}" --user-pool-id "${USER_POOL_ID}")
           if [ -n "${AWS_REGION:-}" ]; then
             args+=(--region "${AWS_REGION}")
           fi
@@ -233,7 +280,7 @@ jobs:
       - name: Run live API smoke tests
         if: steps.deployment_guard.outputs.should_deploy == 'true' && steps.resolve_api_endpoint.outputs.base_url != ''
         env:
-          NO_COLOR: "1"
+          NO_COLOR: '1'
         run: ./backend/scripts/run-smoke.sh --env "${IMPROVIEW_ENV:-dev}" --run Live
       - name: Skip deployment (missing AWS credentials)
         if: steps.deployment_guard.outputs.should_deploy != 'true'
@@ -251,16 +298,16 @@ jobs:
       contents: read
       id-token: write
     env:
-      AWS_REGION: ${{ vars.AWS_REGION }}
-      S3_BUCKET: ${{ vars.AWS_S3_BUCKET }}
-      CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.AWS_CLOUDFRONT_DISTRIBUTION_ID }}
-      FRONTEND_BUILD_DIR: ${{ vars.FRONTEND_BUILD_DIR }}
-      IMPROVIEW_ENV: ${{ vars.IMPROVIEW_ENV }}
-      BASE_URL: ${{ vars.BASE_URL }}
-      GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
-      GOOGLE_CLIENT_SCOPES: ${{ vars.GOOGLE_CLIENT_SCOPES }}
+      AWS_REGION: ${{ secrets.AWS_REGION != '' && secrets.AWS_REGION || vars.AWS_REGION }}
+      FRONTEND_BUILD_DIR: ${{ secrets.FRONTEND_BUILD_DIR != '' && secrets.FRONTEND_BUILD_DIR || vars.FRONTEND_BUILD_DIR }}
+      IMPROVIEW_ENV: ${{ secrets.IMPROVIEW_ENV != '' && secrets.IMPROVIEW_ENV || vars.IMPROVIEW_ENV }}
+      BASE_URL: ${{ secrets.BASE_URL != '' && secrets.BASE_URL || vars.BASE_URL }}
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID != '' && secrets.GOOGLE_CLIENT_ID || vars.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SCOPES: ${{ secrets.GOOGLE_CLIENT_SCOPES != '' && secrets.GOOGLE_CLIENT_SCOPES || vars.GOOGLE_CLIENT_SCOPES }}
       GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-      COGNITO_APP_CLIENT_IDS: ${{ secrets.COGNITO_APP_CLIENT_IDS != '' && secrets.COGNITO_APP_CLIENT_IDS || vars.COGNITO_APP_CLIENT_IDS }}
+      USER_POOL_ID: ${{ secrets.USER_POOL_ID != '' && secrets.USER_POOL_ID || vars.USER_POOL_ID }}
+      USER_POOL_CLIENT_ID: ${{ secrets.USER_POOL_CLIENT_ID != '' && secrets.USER_POOL_CLIENT_ID || vars.USER_POOL_CLIENT_ID }}
+      USER_POOL_CLIENT_IDS: ${{ secrets.USER_POOL_CLIENT_IDS != '' && secrets.USER_POOL_CLIENT_IDS || secrets.COGNITO_APP_CLIENT_IDS != '' && secrets.COGNITO_APP_CLIENT_IDS || vars.USER_POOL_CLIENT_IDS }}
       AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -286,7 +333,10 @@ jobs:
           node-version: 20
       - name: Set up pnpm
         if: steps.dev_deployment_guard.outputs.should_deploy == 'true'
-        run: corepack prepare pnpm@9.0.0 --activate
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9.0.0
+          run_install: false
       - name: Install CDK CLI
         if: steps.dev_deployment_guard.outputs.should_deploy == 'true'
         run: npm install -g aws-cdk@2
@@ -359,21 +409,63 @@ jobs:
           echo "Resolved Cognito User Pool: ${user_pool_id}"
           echo "Resolved Cognito Client: ${client_id}"
           {
+            echo "USER_POOL_ID=${user_pool_id}"
+            echo "USER_POOL_CLIENT_ID=${client_id}"
+            echo "USER_POOL_CLIENT_IDS=${client_id}"
             echo "COGNITO_USER_POOL_ID=${user_pool_id}"
             echo "COGNITO_APP_CLIENT_IDS=${client_id}"
+          } >> "${GITHUB_ENV}"
+      - name: Resolve frontend outputs
+        if: steps.dev_deployment_guard.outputs.should_deploy == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          env_name="${IMPROVIEW_ENV:-dev}"
+          region="${AWS_REGION:-us-east-1}"
+          frontend_stack="Improview-${env_name}-Frontend"
+          echo "Resolving frontend outputs from ${frontend_stack} in ${region}..."
+          bucket="$(aws cloudformation describe-stacks \
+            --region "${region}" \
+            --stack-name "${frontend_stack}" \
+            --query "Stacks[0].Outputs[?OutputKey=='SiteBucketName'].OutputValue" \
+            --output text)"
+          distribution_id="$(aws cloudformation describe-stacks \
+            --region "${region}" \
+            --stack-name "${frontend_stack}" \
+            --query "Stacks[0].Outputs[?OutputKey=='DistributionId'].OutputValue" \
+            --output text)"
+          distribution_domain="$(aws cloudformation describe-stacks \
+            --region "${region}" \
+            --stack-name "${frontend_stack}" \
+            --query "Stacks[0].Outputs[?OutputKey=='DistributionDomain'].OutputValue" \
+            --output text)"
+          if [ -z "${bucket}" ] || [ "${bucket}" = "None" ]; then
+            echo "SiteBucketName output missing for ${frontend_stack}." >&2
+            exit 1
+          fi
+          if [ -z "${distribution_id}" ] || [ "${distribution_id}" = "None" ]; then
+            echo "DistributionId output missing for ${frontend_stack}." >&2
+            exit 1
+          fi
+          echo "Resolved frontend bucket: ${bucket}"
+          echo "Resolved CloudFront distribution: ${distribution_id}"
+          {
+            echo "S3_BUCKET=${bucket}"
+            echo "CLOUDFRONT_DISTRIBUTION_ID=${distribution_id}"
+            echo "CLOUDFRONT_DOMAIN=${distribution_domain}"
           } >> "${GITHUB_ENV}"
       - name: Ensure smoke-test Cognito user
         if: steps.dev_deployment_guard.outputs.should_deploy == 'true'
         env:
-          NO_COLOR: "1"
+          NO_COLOR: '1'
         shell: bash
         run: |
           set -euo pipefail
-          if [ "${COGNITO_USER_POOL_ID:-}" = "" ]; then
-            echo "Smoke user setup failed; COGNITO_USER_POOL_ID is required." >&2
+          if [ "${USER_POOL_ID:-}" = "" ]; then
+            echo "Smoke user setup failed; USER_POOL_ID is required." >&2
             exit 1
           fi
-          args=(--env "${IMPROVIEW_ENV:-dev}" --user "${SMOKE_USER}" --user-pool-id "${COGNITO_USER_POOL_ID}")
+          args=(--env "${IMPROVIEW_ENV:-dev}" --user "${SMOKE_USER}" --user-pool-id "${USER_POOL_ID}")
           if [ -n "${AWS_REGION:-}" ]; then
             args+=(--region "${AWS_REGION}")
           fi
@@ -415,7 +507,7 @@ jobs:
       - name: Run live API smoke tests
         if: steps.dev_deployment_guard.outputs.should_deploy == 'true' && steps.resolve_api_endpoint.outputs.base_url != ''
         env:
-          NO_COLOR: "1"
+          NO_COLOR: '1'
         run: ./backend/scripts/run-smoke.sh --env "${IMPROVIEW_ENV:-dev}" --run Live
       - name: Skip deployment (missing AWS credentials)
         if: steps.dev_deployment_guard.outputs.should_deploy != 'true'
