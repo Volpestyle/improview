@@ -38,7 +38,10 @@ func newLiveSuite(t *testing.T) *liveSuite {
 
 	base := os.Getenv("IMPROVIEW_LIVE_BASE_URL")
 	if base == "" {
-		t.Skip("set IMPROVIEW_LIVE_BASE_URL to run live API integration tests")
+		base = os.Getenv("BASE_URL")
+	}
+	if base == "" {
+		t.Skip("set IMPROVIEW_LIVE_BASE_URL (or BASE_URL) to run live API integration tests")
 	}
 
 	base = strings.TrimRight(base, "/")
