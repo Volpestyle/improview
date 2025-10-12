@@ -32,8 +32,10 @@ jobs:
         with:
           node-version: 20
           cache: pnpm
-      - name: Install pnpm and CDK CLI
-        run: npm install -g pnpm@9.0.0 aws-cdk@2
+      - name: Set up pnpm
+        run: corepack prepare pnpm@9.0.0 --activate
+      - name: Install CDK CLI
+        run: npm install -g aws-cdk@2
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Backend tests
@@ -100,9 +102,12 @@ jobs:
         if: steps.deployment_guard.outputs.should_deploy == 'true'
         with:
           node-version: 20
-      - name: Install pnpm and CDK CLI
+      - name: Set up pnpm
         if: steps.deployment_guard.outputs.should_deploy == 'true'
-        run: npm install -g pnpm@9.0.0 aws-cdk@2
+        run: corepack prepare pnpm@9.0.0 --activate
+      - name: Install CDK CLI
+        if: steps.deployment_guard.outputs.should_deploy == 'true'
+        run: npm install -g aws-cdk@2
       - name: Install dependencies
         if: steps.deployment_guard.outputs.should_deploy == 'true'
         run: pnpm install --dir infra/cdk
@@ -279,9 +284,12 @@ jobs:
         if: steps.dev_deployment_guard.outputs.should_deploy == 'true'
         with:
           node-version: 20
-      - name: Install pnpm and CDK CLI
+      - name: Set up pnpm
         if: steps.dev_deployment_guard.outputs.should_deploy == 'true'
-        run: npm install -g pnpm@9.0.0 aws-cdk@2
+        run: corepack prepare pnpm@9.0.0 --activate
+      - name: Install CDK CLI
+        if: steps.dev_deployment_guard.outputs.should_deploy == 'true'
+        run: npm install -g aws-cdk@2
       - name: Install dependencies
         if: steps.dev_deployment_guard.outputs.should_deploy == 'true'
         run: pnpm install --dir infra/cdk
