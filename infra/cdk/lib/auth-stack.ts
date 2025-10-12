@@ -67,7 +67,11 @@ export class AuthStack extends Stack {
         flows: {
           authorizationCodeGrant: true,
         },
-        scopes: [cognito.OAuthScope.OPENID, cognito.OAuthScope.EMAIL, cognito.OAuthScope.PROFILE],
+        scopes: [
+          cognito.OAuthScope.OPENID,
+          cognito.OAuthScope.EMAIL,
+          cognito.OAuthScope.PROFILE,
+        ],
         callbackUrls: defaultCallbackUrls,
         logoutUrls: defaultLogoutUrls,
       },
