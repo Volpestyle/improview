@@ -3,6 +3,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button, Card, Chip, Select, TextArea, useToast } from '@improview/ui';
 import { apiClient } from '../../api/client';
+import { ApiError } from '../../api/errors';
 import { GenerateRequest } from '../../api/types';
 import { recordAttemptStart } from '../../storage/history';
 
@@ -84,6 +85,14 @@ export const HomePage = () => {
     },
     onError: (error) => {
       console.error(error);
+      if (error instanceof ApiError && error.status === 401) {
+        publish({
+          title: 'Session expired',
+          description: 'Please sign in again to generate a new workspace.',
+          variant: 'error',
+        });
+        return;
+      }
       publish({
         title: 'Generation failed',
         description: 'Please try again or switch providers.',

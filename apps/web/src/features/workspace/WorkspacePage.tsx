@@ -8,6 +8,7 @@ import remarkGfm from 'remark-gfm';
 import { Accordion, Button, Card, Chip, Disclosure, Tabs, Tag, Timer, TimerHandle, useToast } from '@improview/ui';
 import { Play, Pause, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { apiClient } from '../../api/client';
+import { ApiError } from '../../api/errors';
 import { Attempt, ProblemPack, RunResult } from '../../api/types';
 import { recordRunUpdate, recordSubmission } from '../../storage/history';
 import { usePersistedState } from '../../hooks/usePersistedState';
@@ -87,6 +88,14 @@ export const WorkspacePage = ({ attempt, runs, problem }: WorkspacePageProps) =>
     },
     onError: (error) => {
       console.error(error);
+      if (error instanceof ApiError && error.status === 401) {
+        publish({
+          title: 'Session expired',
+          description: 'Please sign in again to continue running tests.',
+          variant: 'error',
+        });
+        return;
+      }
       publish({
         title: 'Test run failed',
         description: 'Unable to execute tests. Please retry.',
@@ -124,6 +133,14 @@ export const WorkspacePage = ({ attempt, runs, problem }: WorkspacePageProps) =>
     },
     onError: (error) => {
       console.error(error);
+      if (error instanceof ApiError && error.status === 401) {
+        publish({
+          title: 'Session expired',
+          description: 'Please sign in again to submit your solution.',
+          variant: 'error',
+        });
+        return;
+      }
       publish({
         title: 'Submission failed',
         description: 'We could not process your solution. Try again shortly.',
