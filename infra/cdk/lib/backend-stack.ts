@@ -68,6 +68,7 @@ export class BackendStack extends Stack {
       code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', '..', 'backend'), {
         bundling: {
           image: lambda.Runtime.GO_1_X.bundlingImage,
+          user: 'root',
           environment: {
             GOOS: 'linux',
             GOARCH: 'arm64',
