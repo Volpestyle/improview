@@ -487,7 +487,6 @@ if [[ "${LOCAL_RUN}" -eq 0 ]]; then
 
   export SMOKE_USER SMOKE_PASSWORD CLIENT_ID CLIENT_SECRET
 
-  AUTH_PARAMS="USERNAME=${SMOKE_USER},PASSWORD=${SMOKE_PASSWORD}"
   if [[ -n "${CLIENT_SECRET}" ]]; then
     SECRET_HASH=$(python3 - <<'PY'
 import base64, hmac, hashlib, os
@@ -498,24 +497,32 @@ digest = hmac.new(client_secret.encode('utf-8'), (username + client_id).encode('
 print(base64.b64encode(digest).decode('utf-8'))
 PY
 )
-    AUTH_PARAMS+="/SECRET_HASH=${SECRET_HASH}"
+    export SECRET_HASH
+  else
+    unset SECRET_HASH 2>/dev/null || true
   fi
 
-  export AUTH_PARAMS
+  AUTH_PARAMS_JSON=$(python3 - <<'PY'
+import json, os, sys
 
-  AUTH_PARAMS_CSV=$(python3 - <<'PY'
-import os
-params = os.environ['AUTH_PARAMS'].split('/')
-print(','.join(params))
+params = {
+    "USERNAME": os.environ["SMOKE_USER"],
+    "PASSWORD": os.environ["SMOKE_PASSWORD"],
+}
+secret_hash = os.environ.get("SECRET_HASH", "")
+if secret_hash:
+    params["SECRET_HASH"] = secret_hash
+sys.stdout.write(json.dumps(params))
 PY
 )
+  unset SECRET_HASH 2>/dev/null || true
 
   log_info "Exchanging credentials for Cognito access token..."
   AUTH_RESPONSE=$(aws cognito-idp initiate-auth \
     --region "${REGION}" \
     --client-id "${CLIENT_ID}" \
     --auth-flow USER_PASSWORD_AUTH \
-    --auth-parameters "${AUTH_PARAMS_CSV}" \
+    --auth-parameters "${AUTH_PARAMS_JSON}" \
     --output json)
 
   export AUTH_RESPONSE

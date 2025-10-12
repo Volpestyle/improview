@@ -11,13 +11,12 @@ const DRY_RUN = false; // Set to false for actual syncing
 
 const EXCLUDED_KEYS = new Set();
 
-const EXCLUDED_PREFIXES = ['VITE_'];
+const EXCLUDED_PREFIXES = [];
 const EXCLUDED_SUFFIXES = ['_API_KEY'];
 
 const RAW_ARGS = process.argv.slice(2);
 const DEBUG =
-  !process.env.CI &&
-  (RAW_ARGS.includes('--debug') || process.env.DEBUG_SYNC_ENV === '1');
+  !process.env.CI && (RAW_ARGS.includes('--debug') || process.env.DEBUG_SYNC_ENV === '1');
 
 function logDebug(...args) {
   if (DEBUG) {
