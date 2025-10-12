@@ -135,7 +135,7 @@ If you ever need to run the flow manually, obtain a token with:
 ```bash
 SMOKE_TOKEN=$(aws cognito-idp initiate-auth \
   --region us-east-1 \
-  --client-id "$COGNITO_CLIENT_ID" \
+  --client-id "$(echo "$COGNITO_APP_CLIENT_IDS" | tr ',' '\n' | head -n1 | xargs)" \
   --auth-flow USER_PASSWORD_AUTH \
   --auth-parameters USERNAME=$SMOKE_USER,PASSWORD=$SMOKE_PASSWORD \
   --query 'AuthenticationResult.AccessToken' \

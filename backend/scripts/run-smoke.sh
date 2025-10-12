@@ -122,6 +122,25 @@ colorize_go_line() {
   printf '%s\n' "$line"
 }
 
+first_csv_entry() {
+  local csv="$1"
+  if [[ -z "${csv:-}" ]]; then
+    return 1
+  fi
+
+  IFS=',' read -ra parts <<<"$csv"
+  for part in "${parts[@]}"; do
+    local trimmed="${part#"${part%%[![:space:]]*}"}"
+    trimmed="${trimmed%"${trimmed##*[![:space:]]}"}"
+    if [[ -n "$trimmed" ]]; then
+      printf '%s' "$trimmed"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 usage() {
   cat <<'EOF'
 Usage: run-smoke.sh [options] [-- [go test args]]
@@ -134,7 +153,7 @@ Options:
   --llm-model <model>          Override OPENAI_MODEL when mode=llm.
   --llm-provider <name>        Override OPENAI_PROVIDER when mode=llm.
   --llm-api-key <key>          Provide an OpenAI-compatible API key when mode=llm.
-  --client-id <id>             Cognito App Client ID (defaults to COGNITO_CLIENT_ID env).
+  --client-id <id>             Cognito App Client ID (defaults to first entry in COGNITO_APP_CLIENT_IDS env).
   --client-secret <secret>     Cognito App Client secret. When provided the script calculates SECRET_HASH automatically.
   --secret-id <arn|name>       Secrets Manager identifier for smoke credentials (default: improview/<env>/smoke-credentials).
   --region <aws-region>        AWS region (default: AWS_REGION env or us-east-1).
@@ -160,7 +179,7 @@ LLM_BASE_URL="${OPENAI_BASE_URL:-}"
 LLM_MODEL="${OPENAI_MODEL:-}"
 LLM_PROVIDER="${OPENAI_PROVIDER:-}"
 LLM_API_KEY="${OPENAI_API_KEY:-}"
-CLIENT_ID="${COGNITO_CLIENT_ID:-}"
+CLIENT_ID="$(first_csv_entry "${COGNITO_APP_CLIENT_IDS:-}")"
 CLIENT_SECRET="${COGNITO_CLIENT_SECRET:-}"  # optional
 SECRET_ID=""
 REGION="${AWS_REGION:-us-east-1}"
@@ -387,10 +406,6 @@ if [[ "${LOAD_DOTENV}" -eq 1 && -f "${REPO_ROOT}/backend/.env.local" ]]; then
 fi
 ENV_BASE_URL="${BASE_URL:-}"
 
-if [[ -z "${CLIENT_ID}" ]]; then
-  CLIENT_ID="${COGNITO_CLIENT_ID:-}"
-fi
-
 if [[ -z "${CLIENT_SECRET}" ]]; then
   CLIENT_SECRET="${COGNITO_CLIENT_SECRET:-}"  # optional
 fi
@@ -424,7 +439,11 @@ if [[ -z "${REGION}" || "${REGION}" == "us-east-1" ]]; then
 fi
 
 if [[ -z "${CLIENT_ID}" && "${LOCAL_RUN}" -eq 0 ]]; then
-  log_error "Cognito client ID is required (set via --client-id or COGNITO_CLIENT_ID env)."
+  CLIENT_ID="$(first_csv_entry "${COGNITO_APP_CLIENT_IDS:-}")"
+fi
+
+if [[ -z "${CLIENT_ID}" && "${LOCAL_RUN}" -eq 0 ]]; then
+  log_error "Cognito client ID is required (set via --client-id or COGNITO_APP_CLIENT_IDS env)."
   exit 1
 fi
 
