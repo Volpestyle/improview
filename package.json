@@ -14,13 +14,18 @@
     "test": "pnpm -r run test",
     "format": "pnpm -r run format",
     "typecheck": "pnpm -r run typecheck",
-    "storybook": "pnpm --filter @improview/ui storybook"
+    "storybook": "pnpm --filter @improview/ui storybook",
+    "backend:serve:local": "dotenvx run -f backend/.env.local -- sh -c 'cd backend && go run ./cmd/api'",
+    "backend:serve:dev": "dotenvx run -f backend/.env.dev -- sh -c 'cd backend && go run ./cmd/api'",
+    "backend:smoke:local": "dotenvx run -f backend/.env.local -- ./backend/scripts/run-smoke.sh --local",
+    "backend:smoke:dev": "dotenvx run -f backend/.env.dev -- ./backend/scripts/run-smoke.sh --env dev"
   },
   "devDependencies": {
-    "@storybook/react-vite": "^8.0.4",
+    "@dotenvx/dotenvx": "^1.51.0",
     "@storybook/addon-a11y": "^8.0.4",
     "@storybook/addon-essentials": "^8.0.4",
     "@storybook/addon-interactions": "^8.0.4",
+    "@storybook/react-vite": "^8.0.4",
     "@storybook/test": "^8.0.4",
     "@testing-library/jest-dom": "^6.4.2",
     "@testing-library/react": "^14.2.1",

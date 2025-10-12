@@ -84,31 +84,30 @@ func NewServicesFromEnv(clock api.Clock) (api.Services, error) {
 }
 
 func configureAuthenticatorFromEnv() (auth.Authenticator, error) {
-	mode := strings.ToLower(strings.TrimSpace(os.Getenv("IMPROVIEW_AUTH_MODE")))
-	if mode == "" || mode == "disabled" {
-		return nil, nil
-	}
-	if mode != "cognito" {
-		return nil, fmt.Errorf("unknown auth mode %q", mode)
-	}
-
-	userPoolID := strings.TrimSpace(os.Getenv("IMPROVIEW_AUTH_COGNITO_USER_POOL_ID"))
+	userPoolID := firstNonEmpty(
+		os.Getenv("IMPROVIEW_AUTH_COGNITO_USER_POOL_ID"),
+		os.Getenv("USER_POOL_ID"),
+	)
+	userPoolID = strings.TrimSpace(userPoolID)
 	if userPoolID == "" {
-		return nil, fmt.Errorf("cognito auth: IMPROVIEW_AUTH_COGNITO_USER_POOL_ID is required")
+		return nil, nil
 	}
 
 	clientIDs := splitCSV(os.Getenv("IMPROVIEW_AUTH_COGNITO_APP_CLIENT_IDS"))
 	if single := strings.TrimSpace(os.Getenv("IMPROVIEW_AUTH_COGNITO_APP_CLIENT_ID")); single != "" {
 		clientIDs = append(clientIDs, single)
 	}
+	if fallback := strings.TrimSpace(os.Getenv("USER_POOL_CLIENT_ID")); fallback != "" {
+		clientIDs = append(clientIDs, fallback)
+	}
 	clientIDs = uniqueStrings(clientIDs)
 	if len(clientIDs) == 0 {
-		return nil, fmt.Errorf("cognito auth: at least one app client id is required")
+		return nil, fmt.Errorf("cognito auth: at least one app client id is required (set IMPROVIEW_AUTH_COGNITO_APP_CLIENT_IDS or USER_POOL_CLIENT_ID)")
 	}
 
 	cfg := auth.CognitoConfig{
 		UserPoolID:   userPoolID,
-		Region:       strings.TrimSpace(os.Getenv("IMPROVIEW_AUTH_COGNITO_REGION")),
+		Region:       resolveCognitoRegion(userPoolID),
 		AppClientIDs: clientIDs,
 		JWKSURL:      strings.TrimSpace(os.Getenv("IMPROVIEW_AUTH_COGNITO_JWKS_URL")),
 	}
@@ -120,6 +119,31 @@ func configureAuthenticatorFromEnv() (auth.Authenticator, error) {
 	}
 
 	return auth.NewCognitoAuthenticator(cfg)
+}
+
+func resolveCognitoRegion(userPoolID string) string {
+	if region := strings.TrimSpace(os.Getenv("IMPROVIEW_AUTH_COGNITO_REGION")); region != "" {
+		return region
+	}
+	if region := strings.TrimSpace(os.Getenv("AWS_REGION")); region != "" {
+		return region
+	}
+	if region := strings.TrimSpace(os.Getenv("AWS_DEFAULT_REGION")); region != "" {
+		return region
+	}
+	if parts := strings.SplitN(userPoolID, "_", 2); len(parts) == 2 {
+		return strings.TrimSpace(parts[0])
+	}
+	return ""
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func parseLLMOptionsFromEnv() LLMOptions {

@@ -29,7 +29,6 @@ type LLMRequestOptions struct {
 type CreateAttemptRequest struct {
 	ProblemID string `json:"problem_id"`
 	Language  string `json:"lang"`
-	UserID    string `json:"user_id,omitempty"`
 }
 
 // CreateAttemptResponse returns the newly created attempt identifier.

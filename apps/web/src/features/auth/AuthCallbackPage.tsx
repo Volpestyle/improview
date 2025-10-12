@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { Card, Spinner } from '@improview/ui';
 import {
@@ -23,8 +23,23 @@ export const AuthCallbackPage = ({ code, state, error, errorDescription }: Callb
   const markUnauthorized = useAuthStore((store) => store.markUnauthorized);
   const [status, setStatus] = useState<CallbackStatus>('processing');
   const [message, setMessage] = useState<string>('Finishing sign-in…');
+  const handledParamsRef = useRef<string | null>(null);
 
   useEffect(() => {
+    const paramsKey = JSON.stringify({
+      code: code ?? null,
+      state: state ?? null,
+      error: error ?? null,
+      errorDescription: errorDescription ?? null,
+    });
+
+    // Guard against StrictMode double-invoking the effect with identical params.
+    if (handledParamsRef.current === paramsKey) {
+      return;
+    }
+
+    handledParamsRef.current = paramsKey;
+
     if (error) {
       setStatus('error');
       setMessage(errorDescription || error || 'Authentication cancelled.');

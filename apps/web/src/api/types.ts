@@ -96,7 +96,6 @@ export type RunResult = z.infer<typeof RunResultSchema>;
 export const CreateAttemptRequestSchema = z.object({
   problem_id: z.string(),
   lang: z.string(),
-  user_id: z.string().optional(),
 });
 
 export type CreateAttemptRequest = z.infer<typeof CreateAttemptRequestSchema>;

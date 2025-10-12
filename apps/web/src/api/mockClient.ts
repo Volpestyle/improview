@@ -61,7 +61,7 @@ export class MockApiClient {
     const attempt: Attempt = {
       id: attemptId,
       problem_id: request.problem_id,
-      user_id: request.user_id,
+      user_id: 'mock-user',
       lang: request.lang,
       started_at: Math.floor(Date.now() / 1000),
       ended_at: 0,

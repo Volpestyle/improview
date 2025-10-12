@@ -80,6 +80,34 @@ func TestAuthGuardRequiresBearerToken(t *testing.T) {
 	}
 }
 
+func TestCreateAttemptUsesAuthenticatedIdentity(t *testing.T) {
+	services := app.NewInMemoryServices(api.RealClock{})
+	services.Authenticator = staticAuthenticator{
+		expectedToken: "valid-token",
+		identity:      auth.Identity{Subject: "user-123", Username: "user@example.com"},
+	}
+	server := api.NewServer(services)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/attempt", strings.NewReader(`{"problem_id":"prob-1","lang":"javascript"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer valid-token")
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for create attempt, got %d", rec.Code)
+	}
+
+	var resp api.CreateAttemptResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode create attempt response: %v", err)
+	}
+
+	if resp.Attempt.UserID != "user-123" {
+		t.Fatalf("expected attempt user_id to match identity subject, got %q", resp.Attempt.UserID)
+	}
+}
+
 func TestGenerateReturnsProblemPack(t *testing.T) {
 	server := setupServer(t)
 

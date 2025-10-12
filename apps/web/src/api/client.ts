@@ -22,7 +22,7 @@ export interface ApiClient {
   getProblem(problemId: string): Promise<ProblemPack>;
 }
 
-const DEFAULT_LIVE_BASE_URL = 'https://bh853brv47.execute-api.us-east-1.amazonaws.com';
+const DEFAULT_LIVE_BASE_URL = 'http://localhost:8080';
 
 export const createApiClient = (): ApiClient => {
   const mode = import.meta.env.VITE_API_MODE as 'live' | 'mock' | undefined;

@@ -38,7 +38,7 @@ export class AuthStack extends Stack {
       standardAttributes: {
         email: {
           required: true,
-          mutable: false,
+          mutable: true,
         },
       },
       passwordPolicy: {
@@ -77,6 +77,7 @@ export class AuthStack extends Stack {
       },
       supportedIdentityProviders: [
         cognito.UserPoolClientIdentityProvider.COGNITO,
+        cognito.UserPoolClientIdentityProvider.GOOGLE,
       ],
     });
 
