@@ -1,0 +1,34 @@
+{
+  "color": {
+    "bg": {
+      "default": "#F5F7FB",
+      "panel": "#FFFFFF",
+      "sunken": "#E5ECF8"
+    },
+    "fg": {
+      "default": "#0F172A",
+      "muted": "#475569",
+      "inverse": "#FFFFFF"
+    },
+    "accent": {
+      "primary": "#2563EB",
+      "emphasis": "#1D4ED8"
+    },
+    "info": {
+      "600": "#0284C7"
+    },
+    "success": {
+      "600": "#16A34A"
+    },
+    "warning": {
+      "600": "#D97706"
+    },
+    "danger": {
+      "600": "#DC2626"
+    },
+    "border": {
+      "subtle": "#CBD5F5",
+      "focus": "#2563EB"
+    }
+  }
+}

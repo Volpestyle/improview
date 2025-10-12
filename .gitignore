@@ -6,6 +6,7 @@ node_modules/
 **/node_modules/
 pnpm-debug.log
 npm-debug.log
+.pnpm-home/
 
 # Local environment files
 .env
