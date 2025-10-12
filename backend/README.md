@@ -71,16 +71,38 @@ When `OPENAI_API_KEY` is present the live LLM generator becomes available. Stati
 
 ### One-time Secret Seeding
 
-Store the Cognito smoke-test credentials in AWS Secrets Manager so local runs and CI can fetch them:
+Store the Cognito smoke-test credentials in AWS Secrets Manager so local runs and CI can fetch them. Replace `dev` with the desired environment name:
 
 ```bash
-export IMPROVIEW_ENV=dev
 export SMOKE_USER="smoke-tester@example.com"
 export SMOKE_PASSWORD="$(openssl rand -base64 24)"
+export USER_POOL_ID="us-east-1_example" # replace with your Cognito user pool ID
+```
 
+Create (or recreate) the Cognito smoke user and set its password to permanent so the `USER_PASSWORD_AUTH` flow succeeds:
+
+```bash
+aws cognito-idp admin-create-user \
+  --user-pool-id "$USER_POOL_ID" \
+  --username "$SMOKE_USER" \
+  --user-attributes Name=email,Value="$SMOKE_USER" Name=email_verified,Value=true \
+  --message-action SUPPRESS
+
+aws cognito-idp admin-set-user-password \
+  --user-pool-id "$USER_POOL_ID" \
+  --username "$SMOKE_USER" \
+  --password "$SMOKE_PASSWORD" \
+  --permanent
+```
+
+If the user already exists, skip straight to `admin-set-user-password`. Verify the account with `aws cognito-idp admin-get-user --user-pool-id "$USER_POOL_ID" --username "$SMOKE_USER"`.
+
+Store the credentials in Secrets Manager so automation can mint tokens:
+
+```bash
 aws secretsmanager create-secret \
   --region us-east-1 \
-  --name "improview/${IMPROVIEW_ENV}/smoke-credentials" \
+  --name "improview/dev/smoke-credentials" \
   --description "Cognito smoke-test credentials" \
   --secret-string "{\"username\":\"${SMOKE_USER}\",\"password\":\"${SMOKE_PASSWORD}\"}"
 ```
@@ -105,6 +127,8 @@ Both commands fetch smoke credentials, mint a Cognito access token (when auth is
 - `--run LiveGenerate` — forward a custom test selector to `go test -run`.
 - `--client-secret <secret>` — supply the Cognito client secret if required.
 - `--debug` — enable verbose Go test output and HTTP logging.
+
+Under the hood `backend/scripts/run-smoke.sh` asks CloudFormation for the `ApiEndpoint` output, exports it as `BASE_URL`, and then runs `go test ./internal/api`. The tests (`backend/internal/api/live_api_test.go`) simply read `BASE_URL` from the environment, so the automatic export keeps local invocations and CI in sync; set `BASE_URL` yourself only when you want to override the resolved value.
 
 If you ever need to run the flow manually, obtain a token with:
 

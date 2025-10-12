@@ -78,6 +78,11 @@ jobs:
       AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      SMOKE_USER: ${{ secrets.SMOKE_USER != '' && secrets.SMOKE_USER || vars.SMOKE_USER != '' && vars.SMOKE_USER || 'smoke-tester@improview.dev' }}
+      SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD != '' && secrets.SMOKE_PASSWORD || vars.SMOKE_PASSWORD != '' && vars.SMOKE_PASSWORD || 'AutoSmoke!2345' }}
+      COGNITO_USER_POOL_ID: ${{ secrets.COGNITO_USER_POOL_ID != '' && secrets.COGNITO_USER_POOL_ID || vars.COGNITO_USER_POOL_ID }}
+      SMOKE_SECRET_NAME: ${{ vars.SMOKE_SECRET_NAME != '' && vars.SMOKE_SECRET_NAME || (vars.IMPROVIEW_ENV != '' && format('improview/{0}/smoke-credentials', vars.IMPROVIEW_ENV) || 'improview/dev/smoke-credentials') }}
+      SMOKE_SECRET_DESCRIPTION: ${{ vars.SMOKE_SECRET_DESCRIPTION != '' && vars.SMOKE_SECRET_DESCRIPTION || 'Cognito smoke-test credentials' }}
     steps:
       - name: Determine deployment eligibility
         id: deployment_guard
@@ -130,7 +135,26 @@ jobs:
         run: aws cloudfront create-invalidation --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" --paths "/*"
       - name: Deploy serverless services
         if: steps.deployment_guard.outputs.should_deploy == 'true'
-        run: pnpm --dir infra/cdk run deploy:services
+        run: pnpm --dir infra/cdk run deploy:services -- --env "${IMPROVIEW_ENV:-dev}"
+      - name: Ensure smoke-test Cognito user
+        if: steps.deployment_guard.outputs.should_deploy == 'true'
+        env:
+          NO_COLOR: "1"
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${COGNITO_USER_POOL_ID:-}" = "" ]; then
+            echo "Smoke user setup failed; COGNITO_USER_POOL_ID is required." >&2
+            exit 1
+          fi
+          args=(--env "${IMPROVIEW_ENV:-dev}" --user "${SMOKE_USER}" --user-pool-id "${COGNITO_USER_POOL_ID}")
+          if [ -n "${AWS_REGION:-}" ]; then
+            args+=(--region "${AWS_REGION}")
+          fi
+          args+=(--password "${SMOKE_PASSWORD}")
+          args+=(--secret-name "${SMOKE_SECRET_NAME}")
+          args+=(--description "${SMOKE_SECRET_DESCRIPTION}")
+          ./backend/scripts/setup-smoke-user.sh "${args[@]}"
       - name: Resolve API endpoint
         id: resolve_api_endpoint
         if: steps.deployment_guard.outputs.should_deploy == 'true'
@@ -192,6 +216,11 @@ jobs:
       AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      SMOKE_USER: ${{ secrets.SMOKE_USER != '' && secrets.SMOKE_USER || vars.SMOKE_USER != '' && vars.SMOKE_USER || 'smoke-tester@improview.dev' }}
+      SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD != '' && secrets.SMOKE_PASSWORD || vars.SMOKE_PASSWORD != '' && vars.SMOKE_PASSWORD || 'AutoSmoke!2345' }}
+      COGNITO_USER_POOL_ID: ${{ secrets.COGNITO_USER_POOL_ID != '' && secrets.COGNITO_USER_POOL_ID || vars.COGNITO_USER_POOL_ID }}
+      SMOKE_SECRET_NAME: ${{ vars.SMOKE_SECRET_NAME != '' && vars.SMOKE_SECRET_NAME || (vars.IMPROVIEW_ENV != '' && format('improview/{0}/smoke-credentials', vars.IMPROVIEW_ENV) || 'improview/dev/smoke-credentials') }}
+      SMOKE_SECRET_DESCRIPTION: ${{ vars.SMOKE_SECRET_DESCRIPTION != '' && vars.SMOKE_SECRET_DESCRIPTION || 'Cognito smoke-test credentials' }}
     steps:
       - name: Determine deployment eligibility
         id: dev_deployment_guard
@@ -244,7 +273,26 @@ jobs:
         run: aws cloudfront create-invalidation --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" --paths "/*"
       - name: Deploy serverless services
         if: steps.dev_deployment_guard.outputs.should_deploy == 'true'
-        run: pnpm --dir infra/cdk run deploy:services
+        run: pnpm --dir infra/cdk run deploy:services -- --env "${IMPROVIEW_ENV:-dev}"
+      - name: Ensure smoke-test Cognito user
+        if: steps.dev_deployment_guard.outputs.should_deploy == 'true'
+        env:
+          NO_COLOR: "1"
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${COGNITO_USER_POOL_ID:-}" = "" ]; then
+            echo "Smoke user setup failed; COGNITO_USER_POOL_ID is required." >&2
+            exit 1
+          fi
+          args=(--env "${IMPROVIEW_ENV:-dev}" --user "${SMOKE_USER}" --user-pool-id "${COGNITO_USER_POOL_ID}")
+          if [ -n "${AWS_REGION:-}" ]; then
+            args+=(--region "${AWS_REGION}")
+          fi
+          args+=(--password "${SMOKE_PASSWORD}")
+          args+=(--secret-name "${SMOKE_SECRET_NAME}")
+          args+=(--description "${SMOKE_SECRET_DESCRIPTION}")
+          ./backend/scripts/setup-smoke-user.sh "${args[@]}"
       - name: Resolve API endpoint
         id: resolve_api_endpoint
         if: steps.dev_deployment_guard.outputs.should_deploy == 'true'

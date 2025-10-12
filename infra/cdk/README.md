@@ -60,24 +60,23 @@ Install the dependencies first (`pnpm --dir infra/cdk install`) so the script ca
 You can rely on environment variables (`OPENAI_API_KEY`, `GROK_API_KEY`, `AWS_REGION`) instead of CLI flags if you prefer. The script merges with any existing secret payload and stamps an `updatedAt` timestamp.
 
 ### Manage smoke test credentials
-Store the Cognito smoke-test username/password in AWS Secrets Manager so CI and local testers can fetch them without hard-coding sensitive data.
+Store the Cognito smoke-test username/password in AWS Secrets Manager so CI and local testers can fetch them without hard-coding sensitive data. Replace `dev` with the desired environment name.
 
 ```bash
-export IMPROVIEW_ENV=dev
 export SMOKE_USER="smoke-tester@example.com"
 export SMOKE_PASSWORD="$(openssl rand -base64 24)"  # generate a strong secret
 
 # first time: create the secret; reruns will fail if it already exists
 aws secretsmanager create-secret \
   --region us-east-1 \
-  --name "improview/${IMPROVIEW_ENV}/smoke-credentials" \
+  --name "improview/dev/smoke-credentials" \
   --description "Cognito smoke-test credentials" \
   --secret-string "{\"username\":\"${SMOKE_USER}\",\"password\":\"${SMOKE_PASSWORD}\"}"
 
 # subsequent rotations: update the existing secret value
 aws secretsmanager put-secret-value \
   --region us-east-1 \
-  --secret-id "improview/${IMPROVIEW_ENV}/smoke-credentials" \
+  --secret-id "improview/dev/smoke-credentials" \
   --secret-string "{\"username\":\"${SMOKE_USER}\",\"password\":\"${SMOKE_PASSWORD}\"}"
 ```
 
@@ -86,7 +85,7 @@ Retrieve the credentials whenever you need to exchange them for an access token:
 ```bash
 SMOKE_SECRET=$(aws secretsmanager get-secret-value \
   --region us-east-1 \
-  --secret-id "improview/${IMPROVIEW_ENV}/smoke-credentials" \
+  --secret-id "improview/dev/smoke-credentials" \
   --query 'SecretString' \
   --output text)
 

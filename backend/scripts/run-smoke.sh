@@ -152,7 +152,7 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 BACKEND_DIR=$(cd "${SCRIPT_DIR}/.." && pwd)
 REPO_ROOT=$(cd "${BACKEND_DIR}/.." && pwd)
 
-ENV_NAME="${IMPROVIEW_ENV:-dev}"
+ENV_NAME="dev"
 MODE="static"
 ENV_BASE_URL=""
 BASE_URL=""
@@ -532,7 +532,6 @@ else
   unset IMPROVIEW_LIVE_ACCESS_TOKEN 2>/dev/null || true
 fi
 
-export IMPROVIEW_ENV="${ENV_NAME}"
 export BASE_URL="${BASE_URL}"
 if [[ "${MODE}" == "llm" ]]; then
   export IMPROVIEW_FORCE_GENERATE_MODE="llm"
