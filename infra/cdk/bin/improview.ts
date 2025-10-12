@@ -7,7 +7,7 @@ import { AuthStack } from '../lib/auth-stack';
 
 const app = new App();
 
-const envName = (app.node.tryGetContext('env') as string) ?? process.env.IMPROVIEW_ENV ?? 'dev';
+const envName = (app.node.tryGetContext('env') as string) ?? 'dev';
 const authDomainPrefix = app.node.tryGetContext('authDomainPrefix') as string | undefined;
 const googleClientId =
   (app.node.tryGetContext('googleClientId') as string | undefined) ?? process.env.GOOGLE_CLIENT_ID;
