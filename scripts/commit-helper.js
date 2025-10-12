@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { spawnSync } = require('child_process');
+<<<<<<< HEAD
 const { createLogger } = require('./lib/node/logging');
 const { parseArgs } = require('./lib/node/cli');
 
@@ -18,6 +19,8 @@ const ARG_SPEC = {
   remote: { type: 'string', default: 'origin' },
   help: { type: 'bool', alias: ['h'], default: false },
 };
+=======
+>>>>>>> 3d46c82 (chore(automation): commit helper and env sync tooling)
 
 function printUsage() {
   console.log(`Usage: node ./scripts/commit-helper.js [options]
@@ -31,6 +34,81 @@ Options:
   -h, --help               Show this help message.`);
 }
 
+<<<<<<< HEAD
+=======
+function parseArgs(argv) {
+  const options = {
+    preview: false,
+    planFile: null,
+    skipPush: false,
+    dryRun: false,
+    remote: 'origin',
+    help: false,
+  };
+
+  const args = argv.slice(2);
+  let helpRequested = false;
+
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === '--preview' || arg === '-p') {
+      options.preview = true;
+    } else if (arg.startsWith('--plan-file=')) {
+      options.planFile = arg.slice('--plan-file='.length);
+    } else if (arg === '--plan-file') {
+      i += 1;
+      if (i >= args.length) {
+        throw new Error('--plan-file requires a value.');
+      }
+      options.planFile = args[i];
+    } else if (arg === '--skip-push') {
+      options.skipPush = true;
+    } else if (arg === '--dry-run') {
+      options.dryRun = true;
+    } else if (arg.startsWith('--remote=')) {
+      options.remote = arg.slice('--remote='.length);
+    } else if (arg === '--remote') {
+      i += 1;
+      if (i >= args.length) {
+        throw new Error('--remote requires a value.');
+      }
+      options.remote = args[i];
+    } else if (arg === '--help' || arg === '-h') {
+      helpRequested = true;
+    } else {
+      throw new Error(`Unknown argument: ${arg}`);
+    }
+  }
+
+  if (helpRequested) {
+    options.help = true;
+    return options;
+  }
+
+  if (!options.preview && !options.planFile) {
+    options.preview = true;
+  }
+
+  if (options.preview && options.planFile) {
+    throw new Error('Cannot use --preview with --plan-file.');
+  }
+
+  if (options.preview && (options.skipPush || options.dryRun || options.remote !== 'origin')) {
+    throw new Error('--skip-push, --dry-run, and --remote require --plan-file.');
+  }
+
+  if (options.planFile && options.planFile.trim() === '') {
+    throw new Error('--plan-file requires a non-empty path.');
+  }
+
+  if (options.remote.trim() === '') {
+    throw new Error('--remote requires a non-empty name.');
+  }
+
+  return options;
+}
+
+>>>>>>> 3d46c82 (chore(automation): commit helper and env sync tooling)
 let currentOptions = null;
 
 function runGit(args, config = {}) {
@@ -41,7 +119,11 @@ function runGit(args, config = {}) {
   }
 
   if (currentOptions.dryRun && dryAction) {
+<<<<<<< HEAD
     logger.info(`[DRY-RUN] git ${args.join(' ')}`);
+=======
+    console.log(`[DRY-RUN] git ${args.join(' ')}`);
+>>>>>>> 3d46c82 (chore(automation): commit helper and env sync tooling)
     return '';
   }
 
@@ -63,8 +145,13 @@ function runGit(args, config = {}) {
 }
 
 function runSection(title, producer) {
+<<<<<<< HEAD
   logger.raw('');
   logger.step(title);
+=======
+  console.log('');
+  console.log(`=== ${title} ===`);
+>>>>>>> 3d46c82 (chore(automation): commit helper and env sync tooling)
   let result;
   try {
     result = producer();
@@ -73,29 +160,49 @@ function runSection(title, producer) {
   }
 
   if (result === undefined || result === null) {
+<<<<<<< HEAD
     logger.raw('(no output)');
+=======
+    console.log('(no output)');
+>>>>>>> 3d46c82 (chore(automation): commit helper and env sync tooling)
     return;
   }
 
   if (Array.isArray(result)) {
     if (result.length === 0) {
+<<<<<<< HEAD
       logger.raw('(no output)');
     } else {
       logger.raw(result.join('\n'));
+=======
+      console.log('(no output)');
+    } else {
+      console.log(result.join('\n'));
+>>>>>>> 3d46c82 (chore(automation): commit helper and env sync tooling)
     }
     return;
   }
 
   if (typeof result === 'string') {
     if (result.trim() === '') {
+<<<<<<< HEAD
       logger.raw('(no output)');
     } else {
       logger.raw(result);
+=======
+      console.log('(no output)');
+    } else {
+      console.log(result);
+>>>>>>> 3d46c82 (chore(automation): commit helper and env sync tooling)
     }
     return;
   }
 
+<<<<<<< HEAD
   logger.raw(String(result));
+=======
+  console.log(String(result));
+>>>>>>> 3d46c82 (chore(automation): commit helper and env sync tooling)
 }
 
 function getCurrentBranch() {
@@ -105,7 +212,11 @@ function getCurrentBranch() {
 
 function showPreview() {
   const branch = getCurrentBranch();
+<<<<<<< HEAD
   logger.info(`Current branch: ${branch}`);
+=======
+  console.log(`Current branch: ${branch}`);
+>>>>>>> 3d46c82 (chore(automation): commit helper and env sync tooling)
 
   runSection('git status --short --branch', () =>
     runGit(['status', '--short', '--branch'], { allowEmptyOutput: true })
@@ -233,18 +344,30 @@ function applyPlan(planFilePath) {
 
   const status = runGit(['status', '--porcelain'], { allowEmptyOutput: true }).trim();
   if (status === '') {
+<<<<<<< HEAD
     logger.success('Working tree is clean. Nothing to commit.');
+=======
+    console.log('Working tree is clean. Nothing to commit.');
+>>>>>>> 3d46c82 (chore(automation): commit helper and env sync tooling)
     return;
   }
 
   ensureNoStagedChanges();
 
   const initialBranch = getCurrentBranch();
+<<<<<<< HEAD
   logger.step(`Applying plan with ${plan.length} commit(s) on branch ${initialBranch}`);
 
   for (const entry of plan) {
     logger.raw('');
     logger.step(`Preparing commit: ${entry.title}`);
+=======
+  console.log(`Applying plan with ${plan.length} commit(s) on branch ${initialBranch}`);
+
+  for (const entry of plan) {
+    console.log('');
+    console.log(`>> Preparing commit: ${entry.title}`);
+>>>>>>> 3d46c82 (chore(automation): commit helper and env sync tooling)
 
     runGit(['reset'], { dryAction: true });
 
@@ -265,13 +388,21 @@ function applyPlan(planFilePath) {
         entry.paths.length === 1 && entry.paths[0].toLowerCase() === 'all'
           ? '(all changes in working tree)'
           : entry.paths.join('\n');
+<<<<<<< HEAD
       logger.info(`Staged files (simulated):\n${stagedDescription}`);
+=======
+      console.log(`Staged files (simulated):\n${stagedDescription}`);
+>>>>>>> 3d46c82 (chore(automation): commit helper and env sync tooling)
     } else {
       const stagedFiles = runGit(['diff', '--cached', '--name-status'], { allowEmptyOutput: true });
       if (stagedFiles.trim() === '') {
         throw new Error(`No files staged for commit "${entry.title}". Ensure the paths are correct.`);
       }
+<<<<<<< HEAD
       logger.info(`Staged files:\n${stagedFiles}`);
+=======
+      console.log(`Staged files:\n${stagedFiles}`);
+>>>>>>> 3d46c82 (chore(automation): commit helper and env sync tooling)
     }
 
     const messageLines = [entry.title];
@@ -283,7 +414,11 @@ function applyPlan(planFilePath) {
     }
 
     if (currentOptions.dryRun) {
+<<<<<<< HEAD
       logger.info('[DRY-RUN] git commit --file <temporary-message>');
+=======
+      console.log(`[DRY-RUN] git commit --file <temporary-message>`);
+>>>>>>> 3d46c82 (chore(automation): commit helper and env sync tooling)
       continue;
     }
 
@@ -296,6 +431,7 @@ function applyPlan(planFilePath) {
   }
 
   if (currentOptions.skipPush) {
+<<<<<<< HEAD
     logger.info('Skipping push as requested.');
   } else if (currentOptions.dryRun) {
     logger.info(`[DRY-RUN] git push ${currentOptions.remote} ${getCurrentBranch()}`);
@@ -303,23 +439,43 @@ function applyPlan(planFilePath) {
     const branch = getCurrentBranch();
     logger.raw('');
     logger.step(`Pushing branch ${branch} to ${currentOptions.remote}`);
+=======
+    console.log('Skipping push as requested.');
+  } else if (currentOptions.dryRun) {
+    console.log(`[DRY-RUN] git push ${currentOptions.remote} ${getCurrentBranch()}`);
+  } else {
+    const branch = getCurrentBranch();
+    console.log('');
+    console.log(`Pushing branch ${branch} to ${currentOptions.remote}`);
+>>>>>>> 3d46c82 (chore(automation): commit helper and env sync tooling)
     runGit(['push', currentOptions.remote, branch]);
   }
 
   if (currentOptions.dryRun) {
+<<<<<<< HEAD
     logger.info('Dry run complete. Working tree state not changed.');
+=======
+    console.log('Dry run complete. Working tree state not changed.');
+>>>>>>> 3d46c82 (chore(automation): commit helper and env sync tooling)
     return;
   }
 
   const remaining = runGit(['status', '--short'], { allowEmptyOutput: true }).trim();
   if (remaining !== '') {
+<<<<<<< HEAD
     logger.warn(`Working tree is not clean after applying the plan:\n${remaining}`);
   } else {
     logger.success('All done. Working tree is clean.');
+=======
+    console.warn(`Working tree is not clean after applying the plan:\n${remaining}`);
+  } else {
+    console.log('All done. Working tree is clean.');
+>>>>>>> 3d46c82 (chore(automation): commit helper and env sync tooling)
   }
 }
 
 function main() {
+<<<<<<< HEAD
   let parsed;
   try {
     parsed = parseArgs(process.argv.slice(2), ARG_SPEC, {
@@ -346,11 +502,22 @@ function main() {
     options.preview = true;
   }
 
+=======
+  let options;
+  try {
+    options = parseArgs(process.argv);
+  } catch (error) {
+    console.error(error.message || error);
+    process.exit(1);
+  }
+
+>>>>>>> 3d46c82 (chore(automation): commit helper and env sync tooling)
   if (options.help) {
     printUsage();
     return;
   }
 
+<<<<<<< HEAD
   if (options.preview && options.planFile) {
     logger.error('Cannot use --preview with --plan-file.');
     process.exit(1);
@@ -371,6 +538,8 @@ function main() {
     process.exit(1);
   }
 
+=======
+>>>>>>> 3d46c82 (chore(automation): commit helper and env sync tooling)
   currentOptions = options;
 
   try {
@@ -382,7 +551,11 @@ function main() {
       throw new Error('No operation specified.');
     }
   } catch (error) {
+<<<<<<< HEAD
     logger.error(error.message || error);
+=======
+    console.error(error.message || error);
+>>>>>>> 3d46c82 (chore(automation): commit helper and env sync tooling)
     process.exit(1);
   }
 }
