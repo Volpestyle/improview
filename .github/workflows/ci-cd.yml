@@ -28,6 +28,8 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: backend/go.mod
+      - name: Set writable Go build cache
+        run: echo "GOCACHE=$PWD/.cache/go-build" >> $GITHUB_ENV
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -277,6 +279,9 @@ jobs:
         if: steps.deployment_guard.outputs.should_deploy == 'true' && steps.resolve_api_endpoint.outputs.base_url != ''
         with:
           go-version-file: backend/go.mod
+      - name: Set writable Go build cache
+        if: steps.deployment_guard.outputs.should_deploy == 'true' && env.BASE_URL != ''
+        run: echo "GOCACHE=$PWD/.cache/go-build" >> $GITHUB_ENV
       - name: Run live API smoke tests
         if: steps.deployment_guard.outputs.should_deploy == 'true' && steps.resolve_api_endpoint.outputs.base_url != ''
         env:
@@ -504,6 +509,9 @@ jobs:
         if: steps.dev_deployment_guard.outputs.should_deploy == 'true' && steps.resolve_api_endpoint.outputs.base_url != ''
         with:
           go-version-file: backend/go.mod
+      - name: Set writable Go build cache
+        if: steps.dev_deployment_guard.outputs.should_deploy == 'true' && env.BASE_URL != ''
+        run: echo "GOCACHE=$PWD/.cache/go-build" >> $GITHUB_ENV
       - name: Run live API smoke tests
         if: steps.dev_deployment_guard.outputs.should_deploy == 'true' && steps.resolve_api_endpoint.outputs.base_url != ''
         env:

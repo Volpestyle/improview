@@ -2,13 +2,13 @@
   "name": "improview-monorepo",
   "version": "0.0.0",
   "private": true,
-  "packageManager": "pnpm@9.0.0",
+  "packageManager": "pnpm@8.15.0",
   "engines": {
     "node": ">=18.18.0"
   },
   "scripts": {
-    "dev": "dotenvx run -f apps/web/.env.local -- pnpm --filter improview-web dev",
-    "dev:live": "dotenvx run -f apps/web/.env.dev -- pnpm --filter improview-web dev",
+    "dev": "pnpm --filter improview-web dev",
+    "dev:live": "pnpm --filter improview-web dev:live",
     "build": "pnpm -r run build",
     "lint": "pnpm -r run lint",
     "test": "pnpm -r run test",
@@ -16,11 +16,9 @@
     "typecheck": "pnpm -r run typecheck",
     "storybook": "pnpm --filter @improview/ui storybook",
     "backend:serve:local": "dotenvx run -f backend/.env.local -- sh -c 'cd backend && go run ./cmd/api'",
-    "backend:smoke:local": "dotenvx run -f backend/.env.local -- ./backend/scripts/run-smoke.sh --local --base-url http://localhost:8080 --debug",
-    "backend:smoke:dev": "dotenvx run -f backend/.env.local -- ./backend/scripts/run-smoke.sh --env dev --debug",
-    "backend:smoke:setup": "dotenvx run -f backend/.env.local -- ./backend/scripts/setup-smoke-user.sh",
-    "sync:env": "node ./scripts/sync-env-to-github.js",
-    "scripts:verify": "./scripts/check-scripts.sh"
+    "backend:serve:dev": "dotenvx run -f backend/.env.dev -- sh -c 'cd backend && go run ./cmd/api'",
+    "backend:smoke:local": "dotenvx run -f backend/.env.local -- ./backend/scripts/run-smoke.sh --local",
+    "backend:smoke:dev": "dotenvx run -f backend/.env.dev -- ./backend/scripts/run-smoke.sh --env dev"
   },
   "devDependencies": {
     "@dotenvx/dotenvx": "^1.51.0",
@@ -35,11 +33,10 @@
     "@types/node": "^20.11.25",
     "@types/react": "^18.2.64",
     "@types/react-dom": "^18.2.19",
-    "@typescript-eslint/eslint-plugin": "^8.46.0",
-    "@typescript-eslint/parser": "^8.46.0",
+    "@typescript-eslint/eslint-plugin": "^7.3.1",
+    "@typescript-eslint/parser": "^7.3.1",
     "@vitejs/plugin-react": "^4.2.1",
     "autoprefixer": "^10.4.17",
-    "dotenv": "^17.2.3",
     "eslint": "^8.57.0",
     "eslint-plugin-jsx-a11y": "^6.8.0",
     "eslint-plugin-react": "^7.34.1",

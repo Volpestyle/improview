@@ -94,14 +94,13 @@ Create an attempt record for a user starting to solve a problem.
 ```json
 {
   "problem_id": "prob_123",
-  "lang": "python",
-  "user_id": "user_42"
+  "lang": "python"
 }
 ```
 
 - `problem_id` *(string, required)* — Identifier from `/api/generate`.
 - `lang` *(string, required)* — Language code for the solution attempt.
-- `user_id` *(string, optional)* — External user identifier for analytics.
+- Caller identity is inferred from the bearer token supplied on the request.
 
 **Response body**
 ```json

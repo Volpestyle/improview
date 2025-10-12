@@ -99,3 +99,12 @@ If `jq` is not installed, replace the last two lines with your preferred JSON pa
 Once the secret exists, local testers can simply run `./backend/scripts/run-smoke.sh --env dev` to fetch the credentials, mint an access token, and execute the live smoke suite end-to-end. Make sure the Cognito app client has the `USER_PASSWORD_AUTH` flow enabled and set the smoke user’s password as permanent (e.g. `aws cognito-idp admin-set-user-password --permanent ...`); otherwise Cognito will return a challenge and the script will exit with guidance. Pass `--debug` if you want `go test -v` output with request/response logging.
 
 Ensure the AWS CLI is authenticated for the target account/region and that `python3` is available locally before invoking the script.
+
+### Configure Google Login (optional)
+
+If you want Cognito to offer "Continue with Google" during login, supply your Google OAuth credentials when deploying:
+
+- Set the environment variables `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` (or pass `--context googleClientId=...` / `googleClientSecret=...` to `cdk`).
+- Optionally provide `GOOGLE_CLIENT_SCOPES` (space- or comma-separated) if you need scopes beyond the defaults of `openid email profile`.
+
+When both id and secret are present the CDK stack creates the Google identity provider, maps common profile attributes, and adds it to the web app client. Leave the variables unset if you want to rely on password-based Cognito sign-in only.

@@ -20,12 +20,13 @@ The Go API can run in two generator modes:
 
 | Variable | Description | Required |
 | --- | --- | --- |
-| `IMPROVIEW_AUTH_MODE` | Set to `cognito` to enforce JWT validation. | No |
-| `IMPROVIEW_AUTH_COGNITO_USER_POOL_ID` | Cognito User Pool ID (e.g. `us-east-1_XXXX`). | Yes (`cognito`) |
-| `IMPROVIEW_AUTH_COGNITO_APP_CLIENT_IDS` | Comma-separated list of allowed app client IDs. | Yes (`cognito`) |
+| `IMPROVIEW_AUTH_COGNITO_USER_POOL_ID` | Cognito User Pool ID (e.g. `us-east-1_XXXX`). Setting this (or `USER_POOL_ID`) enables authentication. | Yes (secured) |
+| `IMPROVIEW_AUTH_COGNITO_APP_CLIENT_IDS` | Comma-separated list of allowed app client IDs (falls back to `IMPROVIEW_AUTH_COGNITO_APP_CLIENT_ID` or `USER_POOL_CLIENT_ID`). | Yes (secured) |
 | `IMPROVIEW_AUTH_COGNITO_REGION` | Overrides the AWS region derived from the pool ID. | No |
 | `IMPROVIEW_AUTH_COGNITO_JWKS_URL` | Custom JWKS URL (defaults to Cognito well-known JWKS). | No |
 | `IMPROVIEW_AUTH_JWKS_CACHE_TTL_SECONDS` | Cache duration for downloaded JWKS keys. | No |
+
+> **Note:** Supplying a user pool ID (either via `IMPROVIEW_AUTH_COGNITO_USER_POOL_ID` or `USER_POOL_ID`) automatically turns authentication on. The CDK stack already injects `USER_POOL_ID` and `USER_POOL_CLIENT_ID` into the Lambda environment, so deployed stacks stay protected without additional flags.
 
 ### Per-request Overrides
 
@@ -51,7 +52,7 @@ To exercise the deployed API and stream request/response payloads to the console
 
 #### Authenticating Deployed Smoke Tests
 
-When the backend runs with `IMPROVIEW_AUTH_MODE=cognito`, the live smoke tests need a valid bearer token. The fastest path is `./backend/scripts/run-smoke.sh`, which handles every step below automatically. For reference, the manual flow looks like this:
+When the backend is configured with a Cognito user pool (i.e. you set `IMPROVIEW_AUTH_COGNITO_USER_POOL_ID` or `USER_POOL_ID`), the live smoke tests need a valid bearer token. The fastest path is `./backend/scripts/run-smoke.sh`, which handles every step below automatically. For reference, the manual flow looks like this:
 
 1. Ensure the Cognito app client allows the `USER_PASSWORD_AUTH` flow and create a non-production test user (for example `smoke-tester`).
 2. Use the AWS CLI to exchange the username/password for an access token:
