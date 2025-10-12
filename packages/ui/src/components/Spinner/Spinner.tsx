@@ -5,9 +5,15 @@ type SpinnerSize = 'sm' | 'md' | 'lg';
 type SpinnerTone = 'default' | 'inverted' | 'accent';
 
 const SIZE_MAP: Record<SpinnerSize, string> = {
-  sm: 'h-4 w-4 border-2',
-  md: 'h-6 w-6 border-2',
-  lg: 'h-8 w-8 border-[3px]',
+  sm: 'h-4 w-4',
+  md: 'h-6 w-6',
+  lg: 'h-8 w-8',
+};
+
+const RING_WIDTH_MAP: Record<SpinnerSize, string> = {
+  sm: 'border-2',
+  md: 'border-2',
+  lg: 'border-[3px]',
 };
 
 const TONE_MAP: Record<SpinnerTone, string> = {
@@ -38,9 +44,9 @@ export const Spinner = forwardRef<HTMLDivElement, SpinnerProps>(
     >
       <span
         className={clsx(
-          'inline-block animate-spin rounded-full border-t-transparent border-solid',
+          'inline-block h-full w-full animate-spin rounded-full border-t-transparent border-solid',
+          RING_WIDTH_MAP[size],
           TONE_MAP[tone],
-          'w-full h-full',
         )}
       />
       <span className="sr-only">{label}</span>
