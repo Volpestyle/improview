@@ -131,17 +131,37 @@ jobs:
       - name: Deploy serverless services
         if: steps.deployment_guard.outputs.should_deploy == 'true'
         run: pnpm --dir infra/cdk run deploy:services
+      - name: Resolve API endpoint
+        id: resolve_api_endpoint
+        if: steps.deployment_guard.outputs.should_deploy == 'true'
+        run: |
+          env_name="${IMPROVIEW_ENV:-dev}"
+          region="${AWS_REGION:-us-east-1}"
+          stack_name="Improview-${env_name}-Backend"
+          echo "Resolving ApiEndpoint from ${stack_name} in ${region}..."
+          endpoint=$(aws cloudformation describe-stacks \
+            --region "${region}" \
+            --stack-name "${stack_name}" \
+            --query 'Stacks[0].Outputs[?OutputKey==`ApiEndpoint`].OutputValue' \
+            --output text)
+          if [ -z "${endpoint}" ] || [ "${endpoint}" = "None" ]; then
+            echo "Failed to resolve ApiEndpoint output for ${stack_name}." >&2
+            exit 1
+          fi
+          echo "Resolved ApiEndpoint: ${endpoint}"
+          echo "BASE_URL=${endpoint}" >> "${GITHUB_ENV}"
+          echo "base_url=${endpoint}" >> "${GITHUB_OUTPUT}"
       - name: Set writable Go build cache
-        if: steps.deployment_guard.outputs.should_deploy == 'true' && env.BASE_URL != ''
+        if: steps.deployment_guard.outputs.should_deploy == 'true' && steps.resolve_api_endpoint.outputs.base_url != ''
         run: |
           mkdir -p .cache/go-build
           echo "GOCACHE=$PWD/.cache/go-build" >> "$GITHUB_ENV"
       - uses: actions/setup-go@v5
-        if: steps.deployment_guard.outputs.should_deploy == 'true' && env.BASE_URL != ''
+        if: steps.deployment_guard.outputs.should_deploy == 'true' && steps.resolve_api_endpoint.outputs.base_url != ''
         with:
           go-version-file: backend/go.mod
       - name: Run live API smoke tests
-        if: steps.deployment_guard.outputs.should_deploy == 'true' && env.BASE_URL != ''
+        if: steps.deployment_guard.outputs.should_deploy == 'true' && steps.resolve_api_endpoint.outputs.base_url != ''
         run: go test ./internal/api -run Live -v
         working-directory: backend
       - name: Skip deployment (missing AWS credentials)
@@ -225,17 +245,37 @@ jobs:
       - name: Deploy serverless services
         if: steps.dev_deployment_guard.outputs.should_deploy == 'true'
         run: pnpm --dir infra/cdk run deploy:services
+      - name: Resolve API endpoint
+        id: resolve_api_endpoint
+        if: steps.dev_deployment_guard.outputs.should_deploy == 'true'
+        run: |
+          env_name="${IMPROVIEW_ENV:-dev}"
+          region="${AWS_REGION:-us-east-1}"
+          stack_name="Improview-${env_name}-Backend"
+          echo "Resolving ApiEndpoint from ${stack_name} in ${region}..."
+          endpoint=$(aws cloudformation describe-stacks \
+            --region "${region}" \
+            --stack-name "${stack_name}" \
+            --query 'Stacks[0].Outputs[?OutputKey==`ApiEndpoint`].OutputValue' \
+            --output text)
+          if [ -z "${endpoint}" ] || [ "${endpoint}" = "None" ]; then
+            echo "Failed to resolve ApiEndpoint output for ${stack_name}." >&2
+            exit 1
+          fi
+          echo "Resolved ApiEndpoint: ${endpoint}"
+          echo "BASE_URL=${endpoint}" >> "${GITHUB_ENV}"
+          echo "base_url=${endpoint}" >> "${GITHUB_OUTPUT}"
       - name: Set writable Go build cache
-        if: steps.dev_deployment_guard.outputs.should_deploy == 'true' && env.BASE_URL != ''
+        if: steps.dev_deployment_guard.outputs.should_deploy == 'true' && steps.resolve_api_endpoint.outputs.base_url != ''
         run: |
           mkdir -p .cache/go-build
           echo "GOCACHE=$PWD/.cache/go-build" >> "$GITHUB_ENV"
       - uses: actions/setup-go@v5
-        if: steps.dev_deployment_guard.outputs.should_deploy == 'true' && env.BASE_URL != ''
+        if: steps.dev_deployment_guard.outputs.should_deploy == 'true' && steps.resolve_api_endpoint.outputs.base_url != ''
         with:
           go-version-file: backend/go.mod
       - name: Run live API smoke tests
-        if: steps.dev_deployment_guard.outputs.should_deploy == 'true' && env.BASE_URL != ''
+        if: steps.dev_deployment_guard.outputs.should_deploy == 'true' && steps.resolve_api_endpoint.outputs.base_url != ''
         run: go test ./internal/api -run Live -v
         working-directory: backend
       - name: Skip deployment (missing AWS credentials)
