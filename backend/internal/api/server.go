@@ -2,9 +2,11 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 
+	"improview/backend/internal/auth"
 	"improview/backend/internal/domain"
 )
 
@@ -22,12 +24,12 @@ func NewServer(services Services) *Server {
 
 	s := &Server{services: services, mux: http.NewServeMux()}
 	// Core routes
-	s.mux.Handle("/api/generate", s.jsonHandler(http.MethodPost, s.handleGenerate))
-	s.mux.Handle("/api/attempt", s.jsonHandler(http.MethodPost, s.handleCreateAttempt))
-	s.mux.Handle("/api/run-tests", s.jsonHandler(http.MethodPost, s.handleRunTests))
-	s.mux.Handle("/api/submit", s.jsonHandler(http.MethodPost, s.handleSubmit))
-	s.mux.Handle("/api/attempt/", http.HandlerFunc(s.handleAttemptByID))
-	s.mux.Handle("/api/problem/", http.HandlerFunc(s.handleProblemByID))
+	s.mux.Handle("/api/generate", s.guard(s.jsonHandler(http.MethodPost, s.handleGenerate)))
+	s.mux.Handle("/api/attempt", s.guard(s.jsonHandler(http.MethodPost, s.handleCreateAttempt)))
+	s.mux.Handle("/api/run-tests", s.guard(s.jsonHandler(http.MethodPost, s.handleRunTests)))
+	s.mux.Handle("/api/submit", s.guard(s.jsonHandler(http.MethodPost, s.handleSubmit)))
+	s.mux.Handle("/api/attempt/", s.guard(http.HandlerFunc(s.handleAttemptByID)))
+	s.mux.Handle("/api/problem/", s.guard(http.HandlerFunc(s.handleProblemByID)))
 	s.mux.Handle("/api/healthz", http.HandlerFunc(s.handleHealth))
 	s.mux.Handle("/api/version", http.HandlerFunc(s.handleVersion))
 
@@ -50,6 +52,48 @@ func (s *Server) jsonHandler(method string, h func(http.ResponseWriter, *http.Re
 			writeError(w, err)
 		}
 	})
+}
+
+func (s *Server) guard(next http.Handler) http.Handler {
+	if s.services.Authenticator == nil {
+		return next
+	}
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token := bearerToken(r.Header.Get("Authorization"))
+		if token == "" {
+			writeError(w, ErrUnauthenticated)
+			return
+		}
+
+		identity, err := s.services.Authenticator.Authenticate(r.Context(), token)
+		if err != nil {
+			switch {
+			case errors.Is(err, auth.ErrForbidden):
+				writeError(w, ErrForbidden)
+			default:
+				writeError(w, ErrUnauthenticated)
+			}
+			return
+		}
+
+		ctx := WithIdentity(r.Context(), identity)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func bearerToken(header string) string {
+	if header == "" {
+		return ""
+	}
+	parts := strings.Fields(header)
+	if len(parts) != 2 {
+		return ""
+	}
+	if !strings.EqualFold(parts[0], "bearer") {
+		return ""
+	}
+	return strings.TrimSpace(parts[1])
 }
 
 func (s *Server) handleGenerate(w http.ResponseWriter, r *http.Request) error {

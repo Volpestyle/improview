@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"improview/backend/internal/api"
+	"improview/backend/internal/auth"
 )
 
 // GeneratorMode selects which problem generator backend to use.
@@ -80,7 +81,57 @@ func NewServicesFromEnv(clock api.Clock) (api.Services, error) {
 		return api.Services{}, fmt.Errorf("unknown generator mode %q", mode)
 	}
 
-	return newServices(clock, options)
+	services, err := newServices(clock, options)
+	if err != nil {
+		return api.Services{}, err
+	}
+
+	authenticator, err := configureAuthenticatorFromEnv()
+	if err != nil {
+		return api.Services{}, err
+	}
+	services.Authenticator = authenticator
+
+	return services, nil
+}
+
+func configureAuthenticatorFromEnv() (auth.Authenticator, error) {
+	mode := strings.ToLower(strings.TrimSpace(os.Getenv("IMPROVIEW_AUTH_MODE")))
+	if mode == "" || mode == "disabled" {
+		return nil, nil
+	}
+	if mode != "cognito" {
+		return nil, fmt.Errorf("unknown auth mode %q", mode)
+	}
+
+	userPoolID := strings.TrimSpace(os.Getenv("IMPROVIEW_AUTH_COGNITO_USER_POOL_ID"))
+	if userPoolID == "" {
+		return nil, fmt.Errorf("cognito auth: IMPROVIEW_AUTH_COGNITO_USER_POOL_ID is required")
+	}
+
+	clientIDs := splitCSV(os.Getenv("IMPROVIEW_AUTH_COGNITO_APP_CLIENT_IDS"))
+	if single := strings.TrimSpace(os.Getenv("IMPROVIEW_AUTH_COGNITO_APP_CLIENT_ID")); single != "" {
+		clientIDs = append(clientIDs, single)
+	}
+	clientIDs = uniqueStrings(clientIDs)
+	if len(clientIDs) == 0 {
+		return nil, fmt.Errorf("cognito auth: at least one app client id is required")
+	}
+
+	cfg := auth.CognitoConfig{
+		UserPoolID:   userPoolID,
+		Region:       strings.TrimSpace(os.Getenv("IMPROVIEW_AUTH_COGNITO_REGION")),
+		AppClientIDs: clientIDs,
+		JWKSURL:      strings.TrimSpace(os.Getenv("IMPROVIEW_AUTH_COGNITO_JWKS_URL")),
+	}
+
+	if raw := strings.TrimSpace(os.Getenv("IMPROVIEW_AUTH_JWKS_CACHE_TTL_SECONDS")); raw != "" {
+		if seconds, err := strconv.Atoi(raw); err == nil && seconds > 0 {
+			cfg.CacheTTL = time.Duration(seconds) * time.Second
+		}
+	}
+
+	return auth.NewCognitoAuthenticator(cfg)
 }
 
 func parseLLMOptionsFromEnv() LLMOptions {
@@ -113,6 +164,36 @@ func defaultString(value, fallback string) string {
 		return trimmed
 	}
 	return fallback
+}
+
+func splitCSV(value string) []string {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	parts := strings.Split(value, ",")
+	results := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			results = append(results, trimmed)
+		}
+	}
+	return results
+}
+
+func uniqueStrings(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(values))
+	results := make([]string, 0, len(values))
+	for _, val := range values {
+		if _, ok := seen[val]; ok {
+			continue
+		}
+		seen[val] = struct{}{}
+		results = append(results, val)
+	}
+	return results
 }
 
 func newServices(clock api.Clock, options ServicesOptions) (api.Services, error) {
