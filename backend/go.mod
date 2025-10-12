@@ -10,6 +10,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.31.12
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.39.6
 	github.com/awslabs/aws-lambda-go-api-proxy v0.16.2
+	github.com/golang-jwt/jwt/v5 v5.3.0
 )
 
 require (
