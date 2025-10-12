@@ -1,0 +1,17 @@
+@import './tailwind.css';
+
+html {
+  background-color: var(--color-bg-default);
+  color: var(--color-fg-default);
+}
+
+body {
+  background-color: var(--color-bg-default);
+  color: var(--color-fg-default);
+  font-family: var(--font-family-sans, Geist, system-ui, sans-serif);
+  min-height: 100vh;
+}
+
+:root {
+  color-scheme: dark;
+}
