@@ -14,7 +14,18 @@ const EXCLUDED_KEYS = new Set();
 const EXCLUDED_PREFIXES = ['VITE_'];
 const EXCLUDED_SUFFIXES = ['_API_KEY'];
 
-function shouldSyncSecret(name, value) {
+const RAW_ARGS = process.argv.slice(2);
+const DEBUG =
+  !process.env.CI &&
+  (RAW_ARGS.includes('--debug') || process.env.DEBUG_SYNC_ENV === '1');
+
+function logDebug(...args) {
+  if (DEBUG) {
+    console.log(...args);
+  }
+}
+
+function shouldSync(name, value) {
   if (EXCLUDED_KEYS.has(name)) {
     return false;
   }
@@ -69,6 +80,28 @@ function setGitHubSecret(name, value, environment = null) {
   }
 }
 
+// Function to set a GitHub variable in a specific environment
+function setGitHubVar(name, value, environment = null) {
+  if (DRY_RUN) {
+    const target = environment ? `in '${environment}'` : 'at repo level';
+    console.log(`[DRY RUN] Would set variable ${target}: ${name} = ${value.slice(0, 10)}...`);
+    return;
+  }
+  try {
+    const envFlag = environment ? `-e ${environment}` : '';
+    execSync(
+      `gh variable set ${name} -R ${GITHUB_REPO} ${envFlag} --body "${value.replace(/"/g, '\\"')}"`,
+      {
+        stdio: 'inherit',
+      },
+    );
+    const target = environment ? `in '${environment}'` : 'at repo level';
+    console.log(`✓ Set variable ${target}: ${name}`);
+  } catch (error) {
+    console.error(`✗ Failed to set variable ${name}: ${error.message}`);
+  }
+}
+
 // Function to wipe secrets in a specific environment or repo level
 function wipeSecrets(environment = null) {
   if (DRY_RUN) {
@@ -102,22 +135,64 @@ function wipeSecrets(environment = null) {
   }
 }
 
+// Function to wipe variables in a specific environment or repo level
+function wipeVars(environment = null) {
+  if (DRY_RUN) {
+    const target = environment ? `in '${environment}' environment` : 'at repo level';
+    console.log(`[DRY RUN] Would wipe variables ${target}`);
+    return;
+  }
+  try {
+    const envFlag = environment ? `-e ${environment}` : '';
+    const output = execSync(`gh variable list -R ${GITHUB_REPO} ${envFlag}`, { encoding: 'utf8' });
+    const lines = output.trim().split('\n');
+    if (lines.length > 1) {
+      // Skip header if present
+      lines.shift(); // Remove header
+    }
+    for (const line of lines) {
+      const parts = line.trim().split(/\s+/);
+      if (parts.length > 0) {
+        const varName = parts[0].trim();
+        if (varName && varName !== '') {
+          execSync(`gh variable delete "${varName}" -R ${GITHUB_REPO} ${envFlag}`, {
+            stdio: 'inherit',
+          });
+          const target = environment ? `from '${environment}'` : 'from repo';
+          console.log(`✓ Deleted variable ${target}: ${varName}`);
+        }
+      }
+    }
+  } catch (error) {
+    console.error(`Failed to wipe variables: ${error.message}`);
+  }
+}
+
 // Function to parse .env file with sections based on headers
 function parseEnvWithSections(filePath) {
   const content = fs.readFileSync(filePath, 'utf8');
   const lines = content.split('\n');
-  const sections = { repo: {}, env: {} };
-  let currentSection = 'env'; // Default to env
+  const sections = { repoSecrets: {}, repoVars: {}, envSecrets: {}, envVars: {} };
+  let currentSection = 'envSecrets'; // Default to env secrets
   for (const line of lines) {
     const trimmed = line.trim();
-    if (trimmed === '# REPO') {
-      currentSection = 'repo';
+    if (trimmed === '# REPO SECRETS') {
+      currentSection = 'repoSecrets';
+    } else if (trimmed === '# VARS') {
+      currentSection = 'repoVars';
+    } else if (trimmed === '# SECRETS') {
+      currentSection = 'envSecrets';
+    } else if (trimmed === '# ENV VARS') {
+      currentSection = 'envVars';
     } else if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
       const [key, ...valueParts] = trimmed.split('=');
       const value = valueParts.join('=').trim();
       sections[currentSection][key.trim()] = value;
     }
   }
+
+  logDebug(`Debug: Parsed sections from ${filePath}:`, sections);
+
   return sections;
 }
 
@@ -134,44 +209,78 @@ function main() {
   console.log(`Found .env files: ${envFiles.join(', ')}`);
 
   console.log('Wiping existing secrets at repo level...');
-  wipeSecrets(); // Wipe repo
+  wipeSecrets(); // Wipe repo secrets
 
   console.log("Wiping existing secrets in 'dev' environment...");
-  wipeSecrets('dev'); // Wipe dev
+  wipeSecrets('dev'); // Wipe dev secrets
 
-  console.log('Setting new secrets...');
+  console.log('Wiping existing variables at repo level...');
+  wipeVars(); // Wipe repo vars
 
-  const processedSecrets = new Set();
+  console.log("Wiping existing variables in 'dev' environment...");
+  wipeVars('dev'); // Wipe dev vars
+
+  console.log('Setting new secrets and variables...');
+
+  const processed = new Set();
 
   for (const file of envFiles) {
     const sections = parseEnvWithSections(file);
 
-    // Set env vars to 'dev' environment
-    for (const [key, value] of Object.entries(sections.env)) {
-      if (processedSecrets.has(key)) {
+    // Set repo secrets
+    for (const [key, value] of Object.entries(sections.repoSecrets)) {
+      if (processed.has(key)) {
         console.log(`Skipping duplicate secret: ${key}`);
         continue;
       }
-      if (!shouldSyncSecret(key, value)) {
-        console.log(`Skipping excluded secret: ${key}`);
-        continue;
-      }
-      setGitHubSecret(key, value, 'dev');
-      processedSecrets.add(key);
-    }
-
-    // Set repo vars to repo level
-    for (const [key, value] of Object.entries(sections.repo)) {
-      if (processedSecrets.has(key)) {
-        console.log(`Skipping duplicate secret: ${key}`);
-        continue;
-      }
-      if (!shouldSyncSecret(key, value)) {
+      if (!shouldSync(key, value)) {
         console.log(`Skipping excluded secret: ${key}`);
         continue;
       }
       setGitHubSecret(key, value); // repo level
-      processedSecrets.add(key);
+      processed.add(key);
+    }
+
+    // Set repo vars
+    for (const [key, value] of Object.entries(sections.repoVars)) {
+      if (processed.has(key)) {
+        console.log(`Skipping duplicate variable: ${key}`);
+        continue;
+      }
+      if (!shouldSync(key, value)) {
+        console.log(`Skipping excluded variable: ${key}`);
+        continue;
+      }
+      setGitHubVar(key, value); // repo level
+      processed.add(key);
+    }
+
+    // Set env secrets
+    for (const [key, value] of Object.entries(sections.envSecrets)) {
+      if (processed.has(key)) {
+        console.log(`Skipping duplicate secret: ${key}`);
+        continue;
+      }
+      if (!shouldSync(key, value)) {
+        console.log(`Skipping excluded secret: ${key}`);
+        continue;
+      }
+      setGitHubSecret(key, value, 'dev');
+      processed.add(key);
+    }
+
+    // Set env vars
+    for (const [key, value] of Object.entries(sections.envVars)) {
+      if (processed.has(key)) {
+        console.log(`Skipping duplicate variable: ${key}`);
+        continue;
+      }
+      if (!shouldSync(key, value)) {
+        console.log(`Skipping excluded variable: ${key}`);
+        continue;
+      }
+      setGitHubVar(key, value, 'dev');
+      processed.add(key);
     }
   }
 
