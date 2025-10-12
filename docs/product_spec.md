@@ -31,7 +31,7 @@ Non‑goals (initial): discussion forums, company‑specific problem sets, multi
 	•	Example solutions: collapsed accordion (don’t show by default).
 	•	Result sheet: pass/fail, runtime/ops count (if measured), test breakdown, diff on expected vs actual for failed cases.
 	•	History: local+cloud session history (problem, code, results, time spent).
-	•	Authentication: Passwordless (Passkeys via WebAuthn) + magic links fallback.
+	•	Authentication: Passwordless (Passkeys via WebAuthn) + magic links fallback; offer “Continue with Google” via Cognito when the Google IdP is configured.
 	•	Them­ing & Fonts:
 	•	UI: Geist (sans).
 	•	Code: Cursor IDE font if provided (custom load); fallback JetBrains Mono → Fira Code.
