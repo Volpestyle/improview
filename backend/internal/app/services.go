@@ -1,8 +1,8 @@
 package app
 
 import (
-	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -35,6 +35,7 @@ type LLMOptions struct {
 	Provider    string
 	Temperature float64
 	Timeout     time.Duration
+	HTTPClient  *http.Client
 }
 
 const (
@@ -68,12 +69,13 @@ func NewServicesFromEnv(clock api.Clock) (api.Services, error) {
 		mode = GeneratorModeStatic
 	}
 
-	options := ServicesOptions{GeneratorMode: mode}
+	options := ServicesOptions{
+		GeneratorMode: mode,
+		LLM:           parseLLMOptionsFromEnv(),
+	}
 	switch mode {
-	case GeneratorModeStatic:
-		// nothing extra
-	case GeneratorModeLLM:
-		options.LLM = parseLLMOptionsFromEnv()
+	case GeneratorModeStatic, GeneratorModeLLM:
+		// handled later
 	default:
 		return api.Services{}, fmt.Errorf("unknown generator mode %q", mode)
 	}
@@ -118,22 +120,22 @@ func newServices(clock api.Clock, options ServicesOptions) (api.Services, error)
 		clock = api.RealClock{}
 	}
 
-	var generator api.ProblemGenerator
-	switch options.GeneratorMode {
-	case GeneratorModeStatic:
-		generator = NewStaticProblemGenerator()
-	case GeneratorModeLLM:
-		llmGenerator, err := NewLLMProblemGenerator(options.LLM)
+	staticGenerator := NewStaticProblemGenerator()
+
+	var llmGenerator api.ProblemGenerator
+	if strings.TrimSpace(options.LLM.APIKey) != "" {
+		var err error
+		llmGenerator, err = NewLLMProblemGenerator(options.LLM)
 		if err != nil {
 			return api.Services{}, err
 		}
-		generator = llmGenerator
-	default:
-		return api.Services{}, fmt.Errorf("unsupported generator mode %q", options.GeneratorMode)
+	} else if options.GeneratorMode == GeneratorModeLLM {
+		return api.Services{}, fmt.Errorf("llm generator: missing API key")
 	}
 
-	if generator == nil {
-		return api.Services{}, errors.New("problem generator is nil")
+	generator, err := NewDynamicProblemGenerator(options.GeneratorMode, staticGenerator, llmGenerator)
+	if err != nil {
+		return api.Services{}, err
 	}
 
 	problems := NewMemoryProblemRepository()

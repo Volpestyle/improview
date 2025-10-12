@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -11,15 +12,31 @@ import (
 	"improview/backend/internal/api"
 	"improview/backend/internal/app"
 	"improview/backend/internal/domain"
+	"improview/backend/internal/testenv"
 )
 
-func setupServer() *api.Server {
+func setupServer(t *testing.T) *api.Server {
+	t.Helper()
+
+	mode := strings.ToLower(strings.TrimSpace(os.Getenv("IMPROVIEW_GENERATOR_MODE")))
+	if mode == string(app.GeneratorModeLLM) {
+		if err := testenv.LoadOnce(".env.local"); err != nil {
+			t.Fatalf("load env file: %v", err)
+		}
+
+		services, err := app.NewServicesFromEnv(api.RealClock{})
+		if err != nil {
+			t.Fatalf("failed to configure llm services: %v", err)
+		}
+		return api.NewServer(services)
+	}
+
 	services := app.NewInMemoryServices(api.RealClock{})
 	return api.NewServer(services)
 }
 
 func TestGenerateReturnsProblemPack(t *testing.T) {
-	server := setupServer()
+	server := setupServer(t)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/generate", strings.NewReader(`{"category":"bfs","difficulty":"easy"}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -58,7 +75,7 @@ func TestGenerateReturnsProblemPack(t *testing.T) {
 }
 
 func TestAttemptLifecycle(t *testing.T) {
-	server := setupServer()
+	server := setupServer(t)
 
 	genReq := httptest.NewRequest(http.MethodPost, "/api/generate", strings.NewReader(`{"category":"bfs","difficulty":"easy"}`))
 	genReq.Header.Set("Content-Type", "application/json")
@@ -168,7 +185,7 @@ func getAttemptID(t *testing.T, body []byte) string {
 }
 
 func TestErrorEnvelopeAndHealthEndpoints(t *testing.T) {
-	server := setupServer()
+	server := setupServer(t)
 
 	// Missing attempt should surface JSON error envelope
 	missingAttempt := httptest.NewRecorder()
