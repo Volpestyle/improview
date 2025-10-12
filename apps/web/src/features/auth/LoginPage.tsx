@@ -8,7 +8,7 @@ import {
   createCodeVerifier,
   createState,
 } from '../../services/authService';
-import { useAuthStore } from '../../state/authStore';
+import { useAuthStore, waitForAuthHydration } from '../../state/authStore';
 
 type LoginPageProps = {
   redirectTo: string;
@@ -21,6 +21,15 @@ export const LoginPage = ({ redirectTo }: LoginPageProps) => {
   const [error, setError] = useState<string | null>(null);
   const [isRedirecting, setIsRedirecting] = useState(false);
   const googleProvider = (import.meta.env.VITE_AUTH_GOOGLE_PROVIDER as string | undefined)?.trim() || 'Google';
+
+  useEffect(() => {
+    if (hasHydrated) {
+      return;
+    }
+    void waitForAuthHydration().catch((error) => {
+      console.warn('Auth hydration failed on login page', error);
+    });
+  }, [hasHydrated]);
 
   useEffect(() => {
     if (!hasHydrated) {

@@ -134,7 +134,7 @@ export const AuthCallbackPage = ({ code, state, error, errorDescription }: Callb
             type="button"
             className="text-sm font-medium text-accent underline"
             onClick={() => {
-              window.location.href = '/auth/login';
+              void navigate({ to: '/auth/login', replace: true });
             }}
           >
             Return to sign-in
