@@ -23,7 +23,7 @@ Non‑goals (initial): discussion forums, company‑specific problem sets, multi
 2) Core Requirements
 
 2.1 Features
-	•	Problem generation: category + difficulty + optional custom prompt → LLM returns structured JSON (problem, constraints, examples, time estimate, hint, solution outlines, unit tests).
+	•	Problem generation: category + difficulty + optional custom prompt → LLM returns structured JSON (problem, constraints, examples, time estimate, hint, solution outlines, unit tests). Allow JavaScript or TypeScript annotations in signatures/solutions (`number[]`, etc.).
 	•	Editor: Zed‑inspired minimal UI, Vim keybindings, IntelliSense, inline errors, split view for statement ↔ code. Dark mode (Anysphere Dark theme) only at launch; editor can toggle to Gruvbox Soft preview mode for readability comparison.
 	•	Timer: auto‑starts from the LLM’s recommended duration; pause/resume; submit auto‑stops.
 	•	Testing: run public tests on demand; hidden tests run on submission. Deterministic, resource‑capped runner with per‑test stdout/stderr capture.
@@ -31,7 +31,7 @@ Non‑goals (initial): discussion forums, company‑specific problem sets, multi
 	•	Example solutions: collapsed accordion (don’t show by default).
 	•	Result sheet: pass/fail, runtime/ops count (if measured), test breakdown, diff on expected vs actual for failed cases.
 	•	History: local+cloud session history (problem, code, results, time spent).
-	•	Authentication: Passwordless (Passkeys via WebAuthn) + magic links fallback.
+	•	Authentication: Passwordless (Passkeys via WebAuthn) + magic links fallback; offer “Continue with Google” via Cognito when the Google IdP is configured.
 	•	Them­ing & Fonts:
 	•	UI: Geist (sans).
 	•	Code: Cursor IDE font if provided (custom load); fallback JetBrains Mono → Fira Code.

@@ -198,8 +198,6 @@ components:
           type: string
         lang:
           type: string
-        user_id:
-          type: string
       required:
         - problem_id
         - lang
