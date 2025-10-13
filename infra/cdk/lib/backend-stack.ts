@@ -1,4 +1,5 @@
 import * as path from 'path';
+import * as os from 'os';
 import { Duration, Stack, StackProps, CfnOutput, RemovalPolicy } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
@@ -68,6 +69,7 @@ export class BackendStack extends Stack {
       code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', '..', 'backend'), {
         bundling: {
           image: lambda.Runtime.GO_1_X.bundlingImage,
+          user: 'root',
           environment: {
             GOOS: 'linux',
             GOARCH: 'arm64',
@@ -75,6 +77,16 @@ export class BackendStack extends Stack {
             GOCACHE: '/tmp/go-build-cache',
             GOMODCACHE: '/tmp/go-mod-cache',
           },
+          volumes: [
+            {
+              hostPath: path.join(os.homedir(), '.cache', 'go', 'mod'),
+              containerPath: '/tmp/go-mod-cache',
+            },
+            {
+              hostPath: path.join(os.homedir(), '.cache', 'go', 'build'),
+              containerPath: '/tmp/go-build-cache',
+            },
+          ],
           command: [
             'bash',
             '-c',

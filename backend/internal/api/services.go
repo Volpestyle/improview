@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"improview/backend/internal/auth"
 	"improview/backend/internal/domain"
 )
 
@@ -48,13 +49,14 @@ type Clock interface {
 
 // Services aggregates all backend dependencies used by HTTP handlers.
 type Services struct {
-	Generator  ProblemGenerator
-	Problems   ProblemRepository
-	Attempts   AttemptStore
-	Tests      TestRunner
-	Submission SubmissionEvaluator
-	Health     HealthReporter
-	Clock      Clock
+	Generator     ProblemGenerator
+	Problems      ProblemRepository
+	Attempts      AttemptStore
+	Tests         TestRunner
+	Submission    SubmissionEvaluator
+	Health        HealthReporter
+	Clock         Clock
+	Authenticator auth.Authenticator
 }
 
 // RealClock provides the default wall-clock implementation.

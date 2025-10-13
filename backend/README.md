@@ -11,7 +11,7 @@ Go application that powers the Improview API. This README covers local developme
 
 ## Local Development
 
-1. Configure `backend/.env.local` with the generator mode (`IMPROVIEW_GENERATOR_MODE=static|llm`) and any OpenAI-compatible credentials. The pnpm helpers load this file through `dotenvx`.
+1. Configure `backend/.env.local` with any required OpenAI-compatible credentials (API key, model overrides, etc.). The pnpm helpers load this file through `dotenvx`.
 2. Start the API:
    ```bash
    pnpm backend:serve:local
@@ -27,7 +27,7 @@ Go application that powers the Improview API. This README covers local developme
 
 - `pnpm backend:serve:local` — Run the API with `backend/.env.local`.
 - `pnpm backend:smoke:local` — Execute smoke tests against `http://localhost:8080`.
-- `pnpm backend:smoke:dev` — Resolve stack outputs, authenticate with Cognito, and hit the deployed dev API (ignores local `IMPROVIEW_LIVE_BASE_URL`/`BASE_URL` unless you pass `--base-url`).
+- `pnpm backend:smoke:dev` — Resolve stack outputs, authenticate with Cognito, and hit the deployed dev API (ignores local `BASE_URL` unless you pass `--base-url`).
 
 `backend/scripts/run-smoke.sh` powers the smoke commands and accepts extra flags. Example:
 
@@ -37,55 +37,74 @@ Go application that powers the Improview API. This README covers local developme
 
 Only `backend/.env.local` is required for local helpers; when you target a deployed stack the script fetches the base URL from CloudFormation automatically.
 
-> Tip: pnpm forwards flags directly, so you can run `pnpm backend:smoke:local --mode llm` or `pnpm backend:smoke:dev --run LiveGenerate` without adding an extra `--`. The helper exports both `IMPROVIEW_LIVE_BASE_URL` and `BASE_URL` for compatibility with CI scripts.
+> Tip: pnpm forwards flags directly, so you can run `pnpm backend:smoke:local --mode llm` or `pnpm backend:smoke:dev --run LiveGenerate` without adding an extra `--`. The helper exports `BASE_URL` for downstream scripts.
 > Output is color-coded when run in a TTY; set `NO_COLOR=1` if you prefer plain logs.
 
 ## Configuration
 
-### Generator Modes
-
-- `static` (default) — Uses `StaticProblemGenerator` and canned problems; safe for CI and offline testing.
-- `llm` — Sends `/api/generate` requests to an OpenAI-compatible provider for live generation.
-
-Set the default with `IMPROVIEW_GENERATOR_MODE`. Per-request callers can override by passing `"mode": "llm"` or `"static"` in the JSON payload; unknown values fall back to the configured default.
+When `OPENAI_API_KEY` is present the live LLM generator becomes available. Static packs remain the default, and callers can pass `"mode": "llm"` or `"mode": "static"` per request (or via `run-smoke.sh --mode ...`) to override the behavior.
 
 ### Environment Variables
 
 | Variable | Description | Required |
 | --- | --- | --- |
-| `IMPROVIEW_OPENAI_API_KEY` | API key when `IMPROVIEW_GENERATOR_MODE=llm`. | Yes (llm) |
-| `IMPROVIEW_OPENAI_MODEL` | Model name (defaults to `gpt-4.1-mini`). | No |
-| `IMPROVIEW_OPENAI_BASE_URL` | Override base URL (`https://api.openai.com/v1` by default). | No |
-| `IMPROVIEW_OPENAI_PROVIDER` | Optional label recorded with requests. | No |
-| `IMPROVIEW_OPENAI_TIMEOUT_SECONDS` | Request timeout in seconds (defaults to `25`). | No |
-| `IMPROVIEW_OPENAI_TEMPERATURE` | Sampling temperature (defaults to `0.2`). | No |
+| `OPENAI_API_KEY` | API key that enables live LLM-backed generation. | Yes (llm) |
+| `OPENAI_MODEL` | Model name (defaults to `gpt-4.1-mini`). | No |
+| `OPENAI_BASE_URL` | Override base URL (`https://api.openai.com/v1` by default). | No |
+| `OPENAI_PROVIDER` | Optional label recorded with requests. | No |
+| `OPENAI_TIMEOUT_SECONDS` | Request timeout in seconds (defaults to `25`). | No |
+| `OPENAI_TEMPERATURE` | Sampling temperature (defaults to `0.2`). | No |
 
 #### Authentication
 
 | Variable | Description | Required |
 | --- | --- | --- |
-| `IMPROVIEW_AUTH_COGNITO_USER_POOL_ID` | Cognito User Pool ID (or `USER_POOL_ID`). Enabling this turns auth on. | Yes (secured) |
-| `IMPROVIEW_AUTH_COGNITO_APP_CLIENT_IDS` | Comma-separated list of allowed app client IDs. Falls back to `IMPROVIEW_AUTH_COGNITO_APP_CLIENT_ID` or `USER_POOL_CLIENT_ID`. | Yes (secured) |
-| `IMPROVIEW_AUTH_COGNITO_REGION` | Override region parsed from the pool ID. | No |
-| `IMPROVIEW_AUTH_COGNITO_JWKS_URL` | Custom JWKS URL (defaults to Cognito discovery). | No |
-| `IMPROVIEW_AUTH_JWKS_CACHE_TTL_SECONDS` | Cache TTL for downloaded JWKS keys. | No |
+| `USER_POOL_ID` | Cognito User Pool ID. Enabling this turns auth on. | Yes (secured) |
+| `USER_POOL_CLIENT_ID` | Primary Cognito App Client ID allowed to call the API. | Yes (secured) |
+| `USER_POOL_CLIENT_IDS` | Additional comma-separated client IDs (optional). | No |
+| `COGNITO_REGION` | Override region parsed from the pool ID. | No |
+| `COGNITO_JWKS_URL` | Custom JWKS URL (defaults to Cognito discovery). | No |
+| `COGNITO_JWKS_CACHE_TTL_SECONDS` | Cache TTL for downloaded JWKS keys. | No |
 
-> The CDK stack automatically injects `USER_POOL_ID` and `USER_POOL_CLIENT_ID` into the Lambda runtime, so deployed stacks stay authenticated without extra configuration.
+> The CDK stack automatically injects `USER_POOL_ID`, `USER_POOL_CLIENT_ID`, and `PROVIDER_SECRET_ARN` into the Lambda runtime, so deployed stacks stay authenticated without extra configuration. Legacy variables prefixed with `COGNITO_` are still honoured for backward compatibility.
 
 ## Smoke Tests
 
 ### One-time Secret Seeding
 
-Store the Cognito smoke-test credentials in AWS Secrets Manager so local runs and CI can fetch them:
+Store the Cognito smoke-test credentials in AWS Secrets Manager so local runs and CI can fetch them. Replace `dev` with the desired environment name:
 
 ```bash
-export IMPROVIEW_ENV=dev
 export SMOKE_USER="smoke-tester@example.com"
 export SMOKE_PASSWORD="$(openssl rand -base64 24)"
+export USER_POOL_ID="us-east-1_example" # replace with your Cognito user pool ID
+export USER_POOL_CLIENT_ID="your-app-client-id"
+```
 
+Create (or recreate) the Cognito smoke user and set its password to permanent so the `USER_PASSWORD_AUTH` flow succeeds:
+
+```bash
+aws cognito-idp admin-create-user \
+  --user-pool-id "$USER_POOL_ID" \
+  --username "$SMOKE_USER" \
+  --user-attributes Name=email,Value="$SMOKE_USER" Name=email_verified,Value=true \
+  --message-action SUPPRESS
+
+aws cognito-idp admin-set-user-password \
+  --user-pool-id "$USER_POOL_ID" \
+  --username "$SMOKE_USER" \
+  --password "$SMOKE_PASSWORD" \
+  --permanent
+```
+
+If the user already exists, skip straight to `admin-set-user-password`. Verify the account with `aws cognito-idp admin-get-user --user-pool-id "$USER_POOL_ID" --username "$SMOKE_USER"`.
+
+Store the credentials in Secrets Manager so automation can mint tokens:
+
+```bash
 aws secretsmanager create-secret \
   --region us-east-1 \
-  --name "improview/${IMPROVIEW_ENV}/smoke-credentials" \
+  --name "improview/dev/smoke-credentials" \
   --description "Cognito smoke-test credentials" \
   --secret-string "{\"username\":\"${SMOKE_USER}\",\"password\":\"${SMOKE_PASSWORD}\"}"
 ```
@@ -111,18 +130,20 @@ Both commands fetch smoke credentials, mint a Cognito access token (when auth is
 - `--client-secret <secret>` — supply the Cognito client secret if required.
 - `--debug` — enable verbose Go test output and HTTP logging.
 
+Under the hood `backend/scripts/run-smoke.sh` asks CloudFormation for the `ApiEndpoint` output, exports it as `BASE_URL`, and then runs `go test ./internal/api`. The tests (`backend/internal/api/live_api_test.go`) simply read `BASE_URL` from the environment, so the automatic export keeps local invocations and CI in sync; set `BASE_URL` yourself only when you want to override the resolved value.
+
 If you ever need to run the flow manually, obtain a token with:
 
 ```bash
 SMOKE_TOKEN=$(aws cognito-idp initiate-auth \
   --region us-east-1 \
-  --client-id "$IMPROVIEW_COGNITO_CLIENT_ID" \
+  --client-id "${USER_POOL_CLIENT_ID:-$(echo "$USER_POOL_CLIENT_IDS" | tr ',' '\n' | head -n1 | xargs)}" \
   --auth-flow USER_PASSWORD_AUTH \
   --auth-parameters USERNAME=$SMOKE_USER,PASSWORD=$SMOKE_PASSWORD \
   --query 'AuthenticationResult.AccessToken' \
   --output text)
 
-export IMPROVIEW_LIVE_BASE_URL="https://example.execute-api.us-east-1.amazonaws.com"
+export BASE_URL="https://example.execute-api.us-east-1.amazonaws.com"
 export IMPROVIEW_LIVE_ACCESS_TOKEN="$SMOKE_TOKEN"
 
 CI_SMOKE_DEBUG=1 go test ./internal/api -run Live -count=1
