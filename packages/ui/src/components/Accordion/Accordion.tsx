@@ -1,5 +1,19 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import clsx from 'clsx';
+
+const setsAreEqual = (a: Set<string>, b: Set<string>) => {
+  if (a.size !== b.size) {
+    return false;
+  }
+
+  for (const value of a) {
+    if (!b.has(value)) {
+      return false;
+    }
+  }
+
+  return true;
+};
 
 export interface AccordionItem {
   id: string;
@@ -22,11 +36,13 @@ export const Accordion = ({
   className,
   itemClassName,
 }: AccordionProps) => {
-  const defaultSet = useMemo(() => new Set(defaultOpenIds), [defaultOpenIds]);
-  const [openIds, setOpenIds] = useState(() => defaultSet);
+  const [openIds, setOpenIds] = useState<Set<string>>(() => new Set(defaultOpenIds));
 
   useEffect(() => {
-    setOpenIds(new Set(defaultOpenIds));
+    setOpenIds((prev) => {
+      const next = new Set(defaultOpenIds);
+      return setsAreEqual(prev, next) ? prev : next;
+    });
   }, [defaultOpenIds]);
 
   const handleToggle = (id: string) => {
