@@ -56,6 +56,7 @@ export const GenerateRequestSchema = z.object({
   difficulty: z.string(),
   customPrompt: z.string().optional(),
   provider: z.string().optional(),
+  mode: z.enum(['static', 'llm']).optional(),
 });
 
 export type GenerateRequest = z.infer<typeof GenerateRequestSchema>;
@@ -96,7 +97,6 @@ export type RunResult = z.infer<typeof RunResultSchema>;
 export const CreateAttemptRequestSchema = z.object({
   problem_id: z.string(),
   lang: z.string(),
-  user_id: z.string().optional(),
 });
 
 export type CreateAttemptRequest = z.infer<typeof CreateAttemptRequestSchema>;

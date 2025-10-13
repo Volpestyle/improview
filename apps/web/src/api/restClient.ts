@@ -1,3 +1,4 @@
+import { ApiService, createApiService } from '../services/apiService';
 import {
   CreateAttemptRequest,
   CreateAttemptResponse,
@@ -17,44 +18,15 @@ import {
   SubmitResponseSchema,
 } from './types';
 
-export class ApiError extends Error {
-  constructor(
-    message: string,
-    public readonly status: number,
-    public readonly payload?: unknown,
-  ) {
-    super(message);
-    this.name = 'ApiError';
-  }
-}
-
-const joinUrl = (baseUrl: string, path: string) => {
-  const normalizedBase = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  return `${normalizedBase}${normalizedPath}`;
-};
-
 export class RestApiClient {
-  constructor(private readonly baseUrl: string) {}
+  private readonly api: ApiService;
+
+  constructor(private readonly baseUrl: string, apiService?: ApiService) {
+    this.api = apiService ?? createApiService(baseUrl);
+  }
 
   private async request<T>(path: string, init: RequestInit, schema: { parse: (data: unknown) => T }) {
-    const response = await fetch(joinUrl(this.baseUrl, path), {
-      ...init,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(init.headers ?? {}),
-      },
-      credentials: 'include',
-    });
-
-    const contentType = response.headers.get('content-type');
-    const isJson = contentType?.includes('application/json');
-    const payload = isJson ? await response.json() : await response.text();
-
-    if (!response.ok) {
-      throw new ApiError('Request failed', response.status, payload);
-    }
-
+    const payload = await this.api.request(path, init);
     return schema.parse(payload);
   }
 

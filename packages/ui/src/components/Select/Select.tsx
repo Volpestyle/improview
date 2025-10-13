@@ -25,6 +25,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
       id,
       placeholder,
       defaultValue,
+      value,
       ...rest
     },
     ref,
@@ -47,7 +48,9 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
             {...rest}
             id={selectId}
             ref={ref}
-            defaultValue={defaultValue ?? rest.value}
+            {...(value !== undefined
+              ? { value }
+              : { defaultValue: defaultValue ?? (placeholder ? '' : undefined) })}
             aria-invalid={Boolean(errorMessage)}
             aria-describedby={describedBy}
             className={clsx(
