@@ -152,6 +152,29 @@ jobs:
       - name: Deploy serverless services
         if: steps.deployment_guard.outputs.should_deploy == 'true'
         run: pnpm --dir infra/cdk run deploy:services -- --env "${IMPROVIEW_ENV:-dev}"
+      - name: Update provider secrets
+        if: steps.deployment_guard.outputs.should_deploy == 'true'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GROK_API_KEY: ${{ secrets.GROK_API_KEY }}
+        run: |
+          set -euo pipefail
+          secret_name="improview/${IMPROVIEW_ENV:-dev}/providers"
+          if [ -z "${OPENAI_API_KEY:-}" ] && [ -z "${GROK_API_KEY:-}" ]; then
+            echo "No provider API keys provided; skipping secret update."
+            exit 0
+          fi
+          if ! aws secretsmanager describe-secret --secret-id "${secret_name}" > /dev/null 2>&1; then
+            echo "Secrets Manager entry ${secret_name} not found; skipping upsert."
+            exit 0
+          fi
+          payload="$(python3 -c 'import json, os; data = {}; openai = os.environ.get(\"OPENAI_API_KEY\", \"\").strip(); if openai: data[\"openaiApiKey\"] = openai; grok = os.environ.get(\"GROK_API_KEY\", \"\").strip(); if grok: data[\"grokApiKey\"] = grok; print(json.dumps(data))')"
+          if [ "${payload}" = "{}" ]; then
+            echo "No provider API keys provided; skipping secret update."
+            exit 0
+          fi
+          aws secretsmanager put-secret-value --secret-id "${secret_name}" --secret-string "${payload}"
+          echo "Updated provider secret ${secret_name}."
       - name: Resolve Cognito identifiers
         if: steps.deployment_guard.outputs.should_deploy == 'true'
         shell: bash
@@ -379,6 +402,29 @@ jobs:
       - name: Deploy serverless services
         if: steps.dev_deployment_guard.outputs.should_deploy == 'true'
         run: pnpm --dir infra/cdk run deploy:services -- --env "${IMPROVIEW_ENV:-dev}"
+      - name: Update provider secrets
+        if: steps.dev_deployment_guard.outputs.should_deploy == 'true'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GROK_API_KEY: ${{ secrets.GROK_API_KEY }}
+        run: |
+          set -euo pipefail
+          secret_name="improview/${IMPROVIEW_ENV:-dev}/providers"
+          if [ -z "${OPENAI_API_KEY:-}" ] && [ -z "${GROK_API_KEY:-}" ]; then
+            echo "No provider API keys provided; skipping secret update."
+            exit 0
+          fi
+          if ! aws secretsmanager describe-secret --secret-id "${secret_name}" > /dev/null 2>&1; then
+            echo "Secrets Manager entry ${secret_name} not found; skipping upsert."
+            exit 0
+          fi
+          payload="$(python3 -c 'import json, os; data = {}; openai = os.environ.get(\"OPENAI_API_KEY\", \"\").strip(); if openai: data[\"openaiApiKey\"] = openai; grok = os.environ.get(\"GROK_API_KEY\", \"\").strip(); if grok: data[\"grokApiKey\"] = grok; print(json.dumps(data))')"
+          if [ "${payload}" = "{}" ]; then
+            echo "No provider API keys provided; skipping secret update."
+            exit 0
+          fi
+          aws secretsmanager put-secret-value --secret-id "${secret_name}" --secret-string "${payload}"
+          echo "Updated provider secret ${secret_name}."
       - name: Resolve Cognito identifiers
         if: steps.dev_deployment_guard.outputs.should_deploy == 'true'
         shell: bash

@@ -58,3 +58,52 @@ pnpm --dir infra/cdk exec node scripts/set-provider-secret.js \
 Install the dependencies first (`pnpm --dir infra/cdk install`) so the script can load the AWS SDK helper.
 
 You can rely on environment variables (`OPENAI_API_KEY`, `GROK_API_KEY`, `AWS_REGION`) instead of CLI flags if you prefer. The script merges with any existing secret payload and stamps an `updatedAt` timestamp.
+
+### Manage smoke test credentials
+Store the Cognito smoke-test username/password in AWS Secrets Manager so CI and local testers can fetch them without hard-coding sensitive data. Replace `dev` with the desired environment name.
+
+```bash
+export SMOKE_USER="smoke-tester@example.com"
+export SMOKE_PASSWORD="$(openssl rand -base64 24)"  # generate a strong secret
+
+# first time: create the secret; reruns will fail if it already exists
+aws secretsmanager create-secret \
+  --region us-east-1 \
+  --name "improview/dev/smoke-credentials" \
+  --description "Cognito smoke-test credentials" \
+  --secret-string "{\"username\":\"${SMOKE_USER}\",\"password\":\"${SMOKE_PASSWORD}\"}"
+
+# subsequent rotations: update the existing secret value
+aws secretsmanager put-secret-value \
+  --region us-east-1 \
+  --secret-id "improview/dev/smoke-credentials" \
+  --secret-string "{\"username\":\"${SMOKE_USER}\",\"password\":\"${SMOKE_PASSWORD}\"}"
+```
+
+Retrieve the credentials whenever you need to exchange them for an access token:
+
+```bash
+SMOKE_SECRET=$(aws secretsmanager get-secret-value \
+  --region us-east-1 \
+  --secret-id "improview/dev/smoke-credentials" \
+  --query 'SecretString' \
+  --output text)
+
+export SMOKE_USER=$(jq -r '.username' <<<"$SMOKE_SECRET")
+export SMOKE_PASSWORD=$(jq -r '.password' <<<"$SMOKE_SECRET")
+```
+
+If `jq` is not installed, replace the last two lines with your preferred JSON parser.
+
+Once the secret exists, local testers can simply run `./backend/scripts/run-smoke.sh --env dev` to fetch the credentials, mint an access token, and execute the live smoke suite end-to-end. Make sure the Cognito app client has the `USER_PASSWORD_AUTH` flow enabled and set the smoke user’s password as permanent (e.g. `aws cognito-idp admin-set-user-password --permanent ...`); otherwise Cognito will return a challenge and the script will exit with guidance. Pass `--debug` if you want `go test -v` output with request/response logging.
+
+Ensure the AWS CLI is authenticated for the target account/region and that `python3` is available locally before invoking the script.
+
+### Configure Google Login (optional)
+
+If you want Cognito to offer "Continue with Google" during login, supply your Google OAuth credentials when deploying:
+
+- Set the environment variables `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` (or pass `--context googleClientId=...` / `googleClientSecret=...` to `cdk`).
+- Optionally provide `GOOGLE_CLIENT_SCOPES` (space- or comma-separated) if you need scopes beyond the defaults of `openid email profile`.
+
+When both id and secret are present the CDK stack creates the Google identity provider, maps common profile attributes, and adds it to the web app client. Leave the variables unset if you want to rely on password-based Cognito sign-in only.
