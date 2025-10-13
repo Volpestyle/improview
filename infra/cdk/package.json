@@ -8,7 +8,7 @@
     "cdk": "cdk",
     "synth": "cdk synth",
     "deploy": "cdk deploy",
-    "deploy:services": "cdk deploy --require-approval never Improview-${IMPROVIEW_ENV:-dev}-Auth Improview-${IMPROVIEW_ENV:-dev}-Backend Improview-${IMPROVIEW_ENV:-dev}-Frontend",
+    "deploy:services": "node scripts/deploy-services.js",
     "diff": "cdk diff"
   },
   "devDependencies": {

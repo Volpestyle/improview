@@ -7,12 +7,25 @@ import { AuthStack } from '../lib/auth-stack';
 
 const app = new App();
 
-const envName = (app.node.tryGetContext('env') as string) ?? process.env.IMPROVIEW_ENV ?? 'dev';
+const envName = (app.node.tryGetContext('env') as string) ?? 'dev';
 const authDomainPrefix = app.node.tryGetContext('authDomainPrefix') as string | undefined;
+const googleClientId =
+  (app.node.tryGetContext('googleClientId') as string | undefined) ?? process.env.GOOGLE_CLIENT_ID;
+const googleClientSecret =
+  (app.node.tryGetContext('googleClientSecret') as string | undefined) ?? process.env.GOOGLE_CLIENT_SECRET;
+const googleScopesContext =
+  (app.node.tryGetContext('googleScopes') as string | string[] | undefined) ?? process.env.GOOGLE_CLIENT_SCOPES;
+const googleScopes = Array.isArray(googleScopesContext)
+  ? googleScopesContext
+  : googleScopesContext?.split(/[\s,]+/).filter((scope) => scope.length > 0);
+const resolvedGoogleScopes = googleScopes && googleScopes.length > 0 ? googleScopes : undefined;
 
 const authStack = new AuthStack(app, `Improview-${envName}-Auth`, {
   envName,
   domainPrefix: authDomainPrefix,
+  googleClientId: googleClientId?.trim() || undefined,
+  googleClientSecret: googleClientSecret?.trim() || undefined,
+  googleScopes: resolvedGoogleScopes,
 });
 
 const backendStack = new BackendStack(app, `Improview-${envName}-Backend`, {

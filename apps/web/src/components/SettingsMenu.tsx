@@ -3,6 +3,8 @@ import { IconButton, type ThemeMode } from '@improview/ui';
 import clsx from 'clsx';
 import { Moon, Settings, Sun } from 'lucide-react';
 import { useTheme } from '../providers/ThemeProvider';
+import { useAuthStore } from '../state/authStore';
+import { AUTH_SESSION_KEYS, authService } from '../services/authService';
 
 export const SettingsMenu = () => {
   const { theme, setTheme } = useTheme();
@@ -10,6 +12,8 @@ export const SettingsMenu = () => {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
+  const logout = useAuthStore((state) => state.logout);
+  const user = useAuthStore((state) => state.user);
 
   useEffect(() => {
     if (!open) {
@@ -58,6 +62,21 @@ export const SettingsMenu = () => {
     setTheme((prev: ThemeMode) => (prev === 'dark' ? 'light' : 'dark'));
   };
 
+  const handleLogout = () => {
+    logout();
+    sessionStorage.removeItem(AUTH_SESSION_KEYS.codeVerifier);
+    sessionStorage.removeItem(AUTH_SESSION_KEYS.state);
+    sessionStorage.removeItem(AUTH_SESSION_KEYS.redirect);
+    setOpen(false);
+    try {
+      const logoutUrl = authService.getLogoutUrl(window.location.origin);
+      window.location.assign(logoutUrl);
+    } catch (error) {
+      console.error('Failed to compute logout URL', error);
+      window.location.href = '/auth/login';
+    }
+  };
+
   const isDark = theme === 'dark';
   const Icon = isDark ? Moon : Sun;
 
@@ -82,6 +101,21 @@ export const SettingsMenu = () => {
           tabIndex={-1}
           className="absolute right-0 mt-2 w-48 rounded-md border border-border-subtle bg-bg-panel p-2 text-sm text-fg shadow-md focus:outline-none"
         >
+          <div className="flex flex-col gap-1 pb-2">
+            <p className="px-2 text-xs font-medium uppercase tracking-wide text-fg-muted">Account</p>
+            <div className="rounded-md px-2 py-1 text-sm text-fg">
+              <span className="block truncate font-medium">{user?.username ?? 'Signed in'}</span>
+              {user?.email ? <span className="block text-xs text-fg-muted">{user.email}</span> : null}
+            </div>
+            <button
+              type="button"
+              className="rounded-md px-2 py-2 text-left font-medium text-danger-600 transition-colors hover:bg-danger-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+              onClick={handleLogout}
+            >
+              Sign out
+            </button>
+          </div>
+          <div className="my-2 h-px w-full bg-border-subtle" />
           <p className="px-2 pb-2 text-xs font-medium uppercase tracking-wide text-fg-muted">
             Appearance
           </p>

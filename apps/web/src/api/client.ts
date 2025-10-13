@@ -1,4 +1,3 @@
-import { MockApiClient } from './mockClient';
 import { RestApiClient } from './restClient';
 import {
   CreateAttemptRequest,
@@ -22,18 +21,12 @@ export interface ApiClient {
   getProblem(problemId: string): Promise<ProblemPack>;
 }
 
-const DEFAULT_LIVE_BASE_URL = 'https://bh853brv47.execute-api.us-east-1.amazonaws.com';
+const DEFAULT_API_BASE_URL = '';
 
 export const createApiClient = (): ApiClient => {
-  const mode = import.meta.env.VITE_API_MODE as 'live' | 'mock' | undefined;
   const overrideBase = import.meta.env.VITE_API_BASE_URL as string | undefined;
-
-  if (mode === 'live') {
-    const baseUrl = overrideBase ?? DEFAULT_LIVE_BASE_URL;
-    return new RestApiClient(baseUrl);
-  }
-
-  return new MockApiClient();
+  const baseUrl = overrideBase ?? DEFAULT_API_BASE_URL;
+  return new RestApiClient(baseUrl);
 };
 
 export const apiClient: ApiClient = createApiClient();

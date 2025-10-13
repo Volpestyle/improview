@@ -25,7 +25,7 @@ function parseArgs(argv) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
 
-  const envName = args.env || process.env.IMPROVIEW_ENV || "dev";
+  const envName = args.env || "dev";
   const region =
     args.region || process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION;
   if (!region) {

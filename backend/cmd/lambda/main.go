@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"log"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
@@ -11,9 +12,14 @@ import (
 
 	"improview/backend/internal/api"
 	"improview/backend/internal/app"
+	"improview/backend/internal/runtime"
 )
 
 func main() {
+	if err := runtime.LoadLLMEnvFromSecret(context.Background()); err != nil {
+		log.Fatalf("lambda bootstrap: %v", err)
+	}
+
 	services, err := app.NewServicesFromEnv(api.RealClock{})
 	if err != nil {
 		panic(err)

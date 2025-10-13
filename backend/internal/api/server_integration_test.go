@@ -1,25 +1,115 @@
 package api_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"improview/backend/internal/api"
 	"improview/backend/internal/app"
+	"improview/backend/internal/auth"
 	"improview/backend/internal/domain"
+	"improview/backend/internal/testenv"
 )
 
-func setupServer() *api.Server {
+func setupServer(t *testing.T) *api.Server {
+	t.Helper()
+
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("IMPROVIEW_FORCE_GENERATE_MODE")), string(app.GeneratorModeLLM)) {
+		if err := testenv.LoadOnce(".env.local"); err != nil {
+			t.Fatalf("load env file: %v", err)
+		}
+
+		services, err := app.NewServicesFromEnv(api.RealClock{})
+		if err != nil {
+			t.Fatalf("failed to configure llm services: %v", err)
+		}
+		return api.NewServer(services)
+	}
+
 	services := app.NewInMemoryServices(api.RealClock{})
 	return api.NewServer(services)
 }
 
+type staticAuthenticator struct {
+	expectedToken string
+	identity      auth.Identity
+}
+
+func (s staticAuthenticator) Authenticate(_ context.Context, token string) (auth.Identity, error) {
+	if token != s.expectedToken {
+		return auth.Identity{}, auth.ErrUnauthenticated
+	}
+	return s.identity, nil
+}
+
+func TestAuthGuardRequiresBearerToken(t *testing.T) {
+	services := app.NewInMemoryServices(api.RealClock{})
+	services.Authenticator = staticAuthenticator{
+		expectedToken: "valid-token",
+		identity:      auth.Identity{Subject: "user-123", Username: "user@example.com"},
+	}
+	server := api.NewServer(services)
+
+	callGenerate := func(token string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/api/generate", strings.NewReader(`{"category":"bfs","difficulty":"easy"}`))
+		req.Header.Set("Content-Type", "application/json")
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		rec := httptest.NewRecorder()
+		server.Handler().ServeHTTP(rec, req)
+		return rec
+	}
+
+	if res := callGenerate(""); res.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 without authorization header, got %d", res.Code)
+	}
+
+	if res := callGenerate("wrong-token"); res.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for wrong token, got %d", res.Code)
+	}
+
+	if res := callGenerate("valid-token"); res.Code != http.StatusOK {
+		t.Fatalf("expected 200 for valid token, got %d", res.Code)
+	}
+}
+
+func TestCreateAttemptUsesAuthenticatedIdentity(t *testing.T) {
+	services := app.NewInMemoryServices(api.RealClock{})
+	services.Authenticator = staticAuthenticator{
+		expectedToken: "valid-token",
+		identity:      auth.Identity{Subject: "user-123", Username: "user@example.com"},
+	}
+	server := api.NewServer(services)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/attempt", strings.NewReader(`{"problem_id":"prob-1","lang":"javascript"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer valid-token")
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for create attempt, got %d", rec.Code)
+	}
+
+	var resp api.CreateAttemptResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode create attempt response: %v", err)
+	}
+
+	if resp.Attempt.UserID != "user-123" {
+		t.Fatalf("expected attempt user_id to match identity subject, got %q", resp.Attempt.UserID)
+	}
+}
+
 func TestGenerateReturnsProblemPack(t *testing.T) {
-	server := setupServer()
+	server := setupServer(t)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/generate", strings.NewReader(`{"category":"bfs","difficulty":"easy"}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -58,7 +148,7 @@ func TestGenerateReturnsProblemPack(t *testing.T) {
 }
 
 func TestAttemptLifecycle(t *testing.T) {
-	server := setupServer()
+	server := setupServer(t)
 
 	genReq := httptest.NewRequest(http.MethodPost, "/api/generate", strings.NewReader(`{"category":"bfs","difficulty":"easy"}`))
 	genReq.Header.Set("Content-Type", "application/json")
@@ -168,7 +258,7 @@ func getAttemptID(t *testing.T, body []byte) string {
 }
 
 func TestErrorEnvelopeAndHealthEndpoints(t *testing.T) {
-	server := setupServer()
+	server := setupServer(t)
 
 	// Missing attempt should surface JSON error envelope
 	missingAttempt := httptest.NewRecorder()
