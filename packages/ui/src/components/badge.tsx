@@ -10,8 +10,8 @@ const badgeVariants = cva(
     'border-transparent',
     'text-xs',
     'font-medium',
-    'px-2.5',
-    'py-1',
+    'px-1.5',
+    'py-0.5',
     'uppercase',
     'tracking-wide',
   ].join(' '),
@@ -19,6 +19,7 @@ const badgeVariants = cva(
     variants: {
       variant: {
         neutral: 'bg-bg-panel text-fg-muted',
+        secondary: 'bg-bg-sunken text-fg-muted border-border-subtle',
         accent: 'bg-accent text-fg-inverse',
         outline: 'border-border-subtle text-fg-muted',
         success: 'bg-success-soft text-fg-inverse',

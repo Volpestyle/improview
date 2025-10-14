@@ -47,7 +47,8 @@ const ms = (value: number) => `${value}ms`;
 
 const buildColorVariables = (tokens: DesignTokens, mode: ThemeMode): Record<string, string> => {
   const palette = tokens.color[mode];
-  return {
+
+  const prefixed = {
     '--color-bg-default': palette.bg.default,
     '--color-bg-panel': palette.bg.panel,
     '--color-bg-sunken': palette.bg.sunken,
@@ -72,6 +73,53 @@ const buildColorVariables = (tokens: DesignTokens, mode: ThemeMode): Record<stri
     '--color-border-focus': palette.border.focus,
     '--color-overlay-backdrop': palette.overlay.backdrop,
   };
+
+  const aliases = {
+    '--bg-default': palette.bg.default,
+    '--bg-panel': palette.bg.panel,
+    '--bg-sunken': palette.bg.sunken,
+    '--bg-elevated': palette.bg.elevated,
+    '--background': palette.bg.default,
+    '--foreground': palette.fg.default,
+    '--card': palette.bg.panel,
+    '--card-foreground': palette.fg.default,
+    '--popover': palette.bg.elevated,
+    '--popover-foreground': palette.fg.default,
+    '--accent-primary': palette.accent.primary,
+    '--accent-emphasis': palette.accent.emphasis,
+    '--accent-soft': palette.accent.soft,
+    '--accent': palette.accent.primary,
+    '--accent-foreground': palette.fg.inverse,
+    '--fg-default': palette.fg.default,
+    '--fg-muted': palette.fg.muted,
+    '--fg-subtle': palette.fg.subtle,
+    '--fg-inverse': palette.fg.inverse,
+    '--muted': palette.bg.sunken,
+    '--muted-foreground': palette.fg.muted,
+    '--secondary': palette.bg.sunken,
+    '--secondary-foreground': palette.fg.default,
+    '--primary': palette.accent.primary,
+    '--primary-foreground': palette.fg.inverse,
+    '--destructive': palette.danger['600'],
+    '--destructive-foreground': palette.fg.inverse,
+    '--info-600': palette.info['600'],
+    '--info-soft': palette.info.soft,
+    '--success-600': palette.success['600'],
+    '--success-soft': palette.success.soft,
+    '--warning-600': palette.warning['600'],
+    '--warning-soft': palette.warning.soft,
+    '--danger-600': palette.danger['600'],
+    '--danger-500': palette.danger['600'],
+    '--danger-soft': palette.danger.soft,
+    '--border-default': palette.border.default,
+    '--border-subtle': palette.border.subtle,
+    '--border-focus': palette.border.focus,
+    '--border': palette.border.default,
+    '--input': palette.bg.panel,
+    '--ring': palette.border.focus,
+  };
+
+  return { ...prefixed, ...aliases };
 };
 
 const buildEditorVariables = (tokens: DesignTokens, mode: ThemeMode): Record<string, string> => {

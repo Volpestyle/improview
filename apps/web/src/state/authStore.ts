@@ -1,210 +1,222 @@
 import { create } from 'zustand';
-import { createJSONStorage, persist } from 'zustand/middleware';
-import { authService, composeAuthUser } from '../services/authService';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import { User } from '../types/user';
 
+/**
+ * Authentication status types
+ */
+export type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
+
+/**
+ * Auth store state
+ */
+export interface AuthState {
+    // Status
+    status: AuthStatus;
+    hasHydrated: boolean;
+
+    // User data
+    user: User | null;
+
+    // Tokens
+    accessToken: string | null;
+    refreshToken: string | null;
+    idToken: string | null;
+    expiresAt: number | null;
+
+    // Actions
+    login: (payload: {
+        accessToken: string;
+        refreshToken?: string;
+        idToken?: string;
+        expiresIn?: number;
+        user: User;
+    }) => void;
+    logout: () => void;
+    markUnauthorized: () => void;
+    setHydrated: () => void;
+    refresh: () => Promise<void>;
+}
+
+// Module-level promise for deduplicating concurrent refresh calls
 let refreshPromise: Promise<void> | null = null;
 
-type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
-
-export type AuthUser = {
-  username: string;
-  email?: string;
-};
-
-type LoginPayload = {
-  accessToken: string;
-  idToken?: string;
-  refreshToken?: string;
-  expiresIn?: number;
-  user: AuthUser;
-};
-
-type AuthState = {
-  status: AuthStatus;
-  user: AuthUser | null;
-  accessToken: string | null;
-  idToken: string | null;
-  refreshToken: string | null;
-  expiresAt: number | null;
-  hasHydrated: boolean;
-  login: (payload: LoginPayload) => void;
-  logout: () => void;
-  markUnauthorized: () => void;
-  setHydrated: () => void;
-  refresh: () => Promise<void>;
-};
-
-const storage: Storage =
-  typeof window !== 'undefined'
-    ? window.localStorage
-    : ({
-        getItem: () => null,
-        setItem: () => undefined,
-        removeItem: () => undefined,
-        clear: () => undefined,
-        key: () => null,
-        length: 0,
-      } as Storage);
-
+/**
+ * Create the auth store with persistence
+ */
 export const useAuthStore = create<AuthState>()(
-  persist(
-    (set, get) => ({
-      status: 'loading',
-      user: null,
-      accessToken: null,
-      idToken: null,
-      refreshToken: null,
-      expiresAt: null,
-      hasHydrated: false,
-      login: ({ accessToken, idToken, refreshToken, expiresIn, user }) => {
-        const expiresAt = expiresIn ? Date.now() + expiresIn * 1000 : null;
-        set({
-          user,
-          accessToken,
-          idToken: idToken ?? null,
-          refreshToken: refreshToken ?? null,
-          expiresAt,
-          status: 'authenticated',
-        });
-      },
-      logout: () => {
-        set({
-          user: null,
-          accessToken: null,
-          idToken: null,
-          refreshToken: null,
-          expiresAt: null,
-          status: 'unauthenticated',
-        });
-      },
-      markUnauthorized: () => {
-        set({
-          user: null,
-          accessToken: null,
-          idToken: null,
-          refreshToken: null,
-          expiresAt: null,
-          status: 'unauthenticated',
-        });
-      },
-      setHydrated: () => {
-        const { accessToken, expiresAt } = get();
-        const stillValid = Boolean(accessToken) && (!expiresAt || expiresAt > Date.now());
-        set((state) => {
-          if (stillValid) {
-            return {
-              ...state,
-              hasHydrated: true,
-              status: 'authenticated',
-            };
-          }
-          return {
+    persist(
+        (set, get) => ({
+            // Initial state
+            status: 'loading',
+            hasHydrated: false,
             user: null,
             accessToken: null,
-            idToken: null,
             refreshToken: null,
+            idToken: null,
             expiresAt: null,
-            hasHydrated: true,
-            status: 'unauthenticated',
-          };
-        });
-      },
-      refresh: async () => {
-        if (refreshPromise) {
-          return refreshPromise;
-        }
-        const { refreshToken, user } = get();
-        if (!refreshToken) {
-          throw new Error('No refresh token available');
-        }
 
-        refreshPromise = (async () => {
-          const result = await authService.refreshWithToken(refreshToken);
-          const expiresAt = result.expiresIn ? Date.now() + result.expiresIn * 1000 : null;
-          const nextUser = composeAuthUser({
-            idToken: result.idToken,
-            fallbackUsername: user?.username,
-          });
+            // Login action
+            login: (payload) => {
+                const expiresAt = payload.expiresIn
+                    ? Date.now() + payload.expiresIn * 1000
+                    : null;
 
-          set({
-            accessToken: result.accessToken,
-            idToken: result.idToken ?? null,
-            refreshToken: result.refreshToken ?? refreshToken,
-            expiresAt,
-            status: 'authenticated',
-            user: nextUser.username ? nextUser : user,
-          });
-        })();
+                set({
+                    status: 'authenticated',
+                    user: payload.user,
+                    accessToken: payload.accessToken,
+                    refreshToken: payload.refreshToken || null,
+                    idToken: payload.idToken || null,
+                    expiresAt,
+                });
+            },
 
-        try {
-          await refreshPromise;
-        } finally {
-          refreshPromise = null;
+            // Logout action
+            logout: () => {
+                set({
+                    status: 'unauthenticated',
+                    user: null,
+                    accessToken: null,
+                    refreshToken: null,
+                    idToken: null,
+                    expiresAt: null,
+                });
+            },
+
+            // Mark unauthorized (for API 401 responses)
+            markUnauthorized: () => {
+                set({
+                    status: 'unauthenticated',
+                    user: null,
+                    accessToken: null,
+                    // Keep refresh token to allow re-auth
+                    idToken: null,
+                    expiresAt: null,
+                });
+            },
+
+            // Mark hydration complete
+            setHydrated: () => {
+                const state = get();
+
+                // Check if token is expired
+                const isExpired = state.expiresAt && Date.now() >= state.expiresAt;
+
+                set({
+                    hasHydrated: true,
+                    status: state.accessToken && !isExpired ? 'authenticated' : 'unauthenticated',
+                });
+            },
+
+            // Refresh token action (deduplicates concurrent calls)
+            refresh: async () => {
+                // Return existing promise if refresh is in progress
+                if (refreshPromise) {
+                    return refreshPromise;
+                }
+
+                const state = get();
+
+                // Can't refresh without a refresh token
+                if (!state.refreshToken) {
+                    state.markUnauthorized();
+                    return;
+                }
+
+                // Import auth service dynamically to avoid circular dependency
+                refreshPromise = (async () => {
+                    try {
+                        const { getAuthService } = await import('../lib/auth');
+                        const authService = getAuthService();
+
+                        const response = await authService.refreshToken(state.refreshToken!);
+                        const user = response.id_token
+                            ? authService.decodeIdToken(response.id_token)
+                            : state.user;
+
+                        if (!user) {
+                            throw new Error('No user data available');
+                        }
+
+                        state.login({
+                            accessToken: response.access_token,
+                            refreshToken: response.refresh_token,
+                            idToken: response.id_token,
+                            expiresIn: response.expires_in,
+                            user,
+                        });
+                    } catch (error) {
+                        console.error('Token refresh failed:', error);
+                        state.markUnauthorized();
+                        throw error;
+                    } finally {
+                        refreshPromise = null;
+                    }
+                })();
+
+                return refreshPromise;
+            },
+        }),
+        {
+            name: 'auth-storage',
+            storage: createJSONStorage(() => localStorage),
+            partialize: (state) => ({
+                // Only persist these fields
+                user: state.user,
+                accessToken: state.accessToken,
+                refreshToken: state.refreshToken,
+                idToken: state.idToken,
+                expiresAt: state.expiresAt,
+            }),
+            onRehydrateStorage: () => (state) => {
+                // Mark hydration complete after rehydrating
+                if (state) {
+                    state.setHydrated();
+                }
+            },
         }
-      },
-    }),
-    {
-      name: 'improview-auth',
-      storage: createJSONStorage(() => storage),
-      partialize: (state) => ({
-        user: state.user,
-        accessToken: state.accessToken,
-        idToken: state.idToken,
-        refreshToken: state.refreshToken,
-        expiresAt: state.expiresAt,
-      }),
-    },
-  ),
+    )
 );
 
-useAuthStore.persist.onFinishHydration(() => {
-  useAuthStore.getState().setHydrated();
-});
+/**
+ * Wait for auth store to hydrate before accessing persisted data
+ */
+export async function waitForAuthHydration(): Promise<void> {
+    return new Promise((resolve) => {
+        const unsubscribe = useAuthStore.subscribe((state) => {
+            if (state.hasHydrated) {
+                unsubscribe();
+                resolve();
+            }
+        });
 
-export const waitForAuthHydration = async () => {
-  if (useAuthStore.getState().hasHydrated) {
-    return;
-  }
-
-  if (typeof window !== 'undefined') {
-    try {
-      const stored = window.localStorage.getItem('improview-auth');
-      if (stored) {
-        const parsed = JSON.parse(stored) as {
-          state?: {
-            user?: AuthUser | null;
-            accessToken?: string | null;
-            idToken?: string | null;
-            refreshToken?: string | null;
-            expiresAt?: number | null;
-          };
-        };
-
-        if (parsed?.state) {
-          useAuthStore.setState((state) => ({
-            ...state,
-            user: parsed.state?.user ?? null,
-            accessToken: parsed.state?.accessToken ?? null,
-            idToken: parsed.state?.idToken ?? null,
-            refreshToken: parsed.state?.refreshToken ?? null,
-            expiresAt: parsed.state?.expiresAt ?? null,
-          }));
+        // If already hydrated, resolve immediately
+        if (useAuthStore.getState().hasHydrated) {
+            unsubscribe();
+            resolve();
         }
-      }
-    } catch (error) {
-      console.warn('Failed to hydrate auth state from storage', error);
-    } finally {
-      useAuthStore.getState().setHydrated();
-    }
-    return;
-  }
-
-  await new Promise<void>((resolve) => {
-    const unsubscribe = useAuthStore.subscribe((state: AuthState) => {
-      if (state.hasHydrated) {
-        unsubscribe();
-        resolve();
-      }
     });
-  });
-};
+}
+
+/**
+ * Check if access token is close to expiry (within 5 minutes)
+ */
+export function isTokenExpiringSoon(): boolean {
+    const state = useAuthStore.getState();
+    if (!state.expiresAt) return false;
+
+    const EXPIRY_BUFFER_MS = 5 * 60 * 1000; // 5 minutes
+    return Date.now() + EXPIRY_BUFFER_MS >= state.expiresAt;
+}
+
+/**
+ * Check if access token is expired
+ */
+export function isTokenExpired(): boolean {
+    const state = useAuthStore.getState();
+    if (!state.expiresAt) return false;
+
+    return Date.now() >= state.expiresAt;
+}
+

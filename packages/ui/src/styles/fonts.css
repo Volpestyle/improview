@@ -1,0 +1,100 @@
+/* Geist Font Loading */
+@font-face {
+  font-family: 'Geist';
+  src:
+    url('/fonts/geist-sans/Geist-Variable.woff2') format('woff2-variations'),
+    url('/fonts/geist-sans/Geist-Variable.ttf') format('truetype-variations');
+  font-weight: 100 900;
+  font-display: swap;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Geist';
+  src:
+    url('/fonts/geist-sans/Geist-Regular.woff2') format('woff2'),
+    url('/fonts/geist-sans/Geist-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-display: swap;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Geist';
+  src:
+    url('/fonts/geist-sans/Geist-Medium.woff2') format('woff2'),
+    url('/fonts/geist-sans/Geist-Medium.ttf') format('truetype');
+  font-weight: 500;
+  font-display: swap;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Geist';
+  src:
+    url('/fonts/geist-sans/Geist-SemiBold.woff2') format('woff2'),
+    url('/fonts/geist-sans/Geist-SemiBold.ttf') format('truetype');
+  font-weight: 600;
+  font-display: swap;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Geist';
+  src:
+    url('/fonts/geist-sans/Geist-Bold.woff2') format('woff2'),
+    url('/fonts/geist-sans/Geist-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-display: swap;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  src:
+    url('/fonts/geist-mono/GeistMono-Variable.woff2') format('woff2-variations'),
+    url('/fonts/geist-mono/GeistMono-Variable.ttf') format('truetype-variations');
+  font-weight: 100 900;
+  font-display: swap;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  src:
+    url('/fonts/geist-mono/GeistMono-Regular.woff2') format('woff2'),
+    url('/fonts/geist-mono/GeistMono-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-display: swap;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  src:
+    url('/fonts/geist-mono/GeistMono-Medium.woff2') format('woff2'),
+    url('/fonts/geist-mono/GeistMono-Medium.ttf') format('truetype');
+  font-weight: 500;
+  font-display: swap;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  src:
+    url('/fonts/geist-mono/GeistMono-SemiBold.woff2') format('woff2'),
+    url('/fonts/geist-mono/GeistMono-SemiBold.ttf') format('truetype');
+  font-weight: 600;
+  font-display: swap;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  src:
+    url('/fonts/geist-mono/GeistMono-Bold.woff2') format('woff2'),
+    url('/fonts/geist-mono/GeistMono-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-display: swap;
+  font-style: normal;
+}

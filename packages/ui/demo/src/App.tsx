@@ -31,7 +31,14 @@ const PASSING_RESULTS: TestResult[] = [
 
 const FAILING_RESULTS: TestResult[] = [
   { id: 'public-1', status: 'pass', label: 'Public • basic case', timeMs: 12 },
-  { id: 'hidden-1', status: 'fail', label: 'Hidden • reversed array', timeMs: 24, expected: [3, 2, 1], actual: [1, 2, 3] },
+  {
+    id: 'hidden-1',
+    status: 'fail',
+    label: 'Hidden • reversed array',
+    timeMs: 24,
+    expected: [3, 2, 1],
+    actual: [1, 2, 3],
+  },
 ];
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -113,7 +120,8 @@ const App = () => {
                 Pastel-first components for coding interview flows.
               </h1>
               <p className="max-w-2xl text-base text-fg-muted">
-                Every primitive you need to ship the Improview workspace: deterministic tokens, editor chrome, and productive defaults inspired by the Figma reference.
+                Every primitive you need to ship the Improview workspace: deterministic tokens,
+                editor chrome, and productive defaults inspired by the Figma reference.
               </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -133,7 +141,9 @@ const App = () => {
           <section id="actions" className="mb-16 space-y-6">
             <div>
               <h2 className="text-2xl font-semibold text-fg-default">Actions & Inputs</h2>
-              <p className="text-sm text-fg-muted">Buttons, toggles, and form primitives wired to the token system.</p>
+              <p className="text-sm text-fg-muted">
+                Buttons, toggles, and form primitives wired to the token system.
+              </p>
             </div>
             <Card>
               <CardHeader>
@@ -172,7 +182,9 @@ const App = () => {
                 <div className="flex items-center justify-between rounded-lg border border-border-subtle bg-bg-sunken/70 p-4">
                   <div>
                     <p className="text-sm font-medium text-fg-default">Keyboard-first by default</p>
-                    <p className="text-xs text-fg-muted">Focus rings map to tokens, respecting reduced motion.</p>
+                    <p className="text-xs text-fg-muted">
+                      Focus rings map to tokens, respecting reduced motion.
+                    </p>
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="text-xs text-fg-muted">Hints enabled</span>
@@ -186,13 +198,17 @@ const App = () => {
           <section id="layout" className="mb-16 space-y-6">
             <div>
               <h2 className="text-2xl font-semibold text-fg-default">Layout & Content</h2>
-              <p className="text-sm text-fg-muted">Cards, tabs, and scroll primitives keep the experience tactile.</p>
+              <p className="text-sm text-fg-muted">
+                Cards, tabs, and scroll primitives keep the experience tactile.
+              </p>
             </div>
             <Card>
               <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                   <CardTitle>Attempt summary</CardTitle>
-                  <CardDescription>Adaptive layout responds to breakpoints from the token set.</CardDescription>
+                  <CardDescription>
+                    Adaptive layout responds to breakpoints from the token set.
+                  </CardDescription>
                 </div>
                 <div className="flex gap-2">
                   <Badge variant="success">3 public tests</Badge>
@@ -206,14 +222,27 @@ const App = () => {
                     <TabsTrigger value="discussion">Discussion</TabsTrigger>
                     <TabsTrigger value="history">History</TabsTrigger>
                   </TabsList>
-                  <TabsContent value="statement" className="mt-4 border border-border-subtle bg-bg-elevated p-4 text-sm leading-relaxed text-fg-muted">
-                    You receive a stream of integers representing classroom attendance. Implement <code className="font-mono text-fg-default">summarizeAttendance</code> to report the moving average over the last <strong>k</strong> sessions.
+                  <TabsContent
+                    value="statement"
+                    className="mt-4 border border-border-subtle bg-bg-elevated p-4 text-sm leading-relaxed text-fg-muted"
+                  >
+                    You receive a stream of integers representing classroom attendance. Implement{' '}
+                    <code className="font-mono text-fg-default">summarizeAttendance</code> to report
+                    the moving average over the last <strong>k</strong> sessions.
                   </TabsContent>
-                  <TabsContent value="discussion" className="mt-4 border border-border-subtle bg-bg-elevated p-4 text-sm text-fg-muted">
-                    Pairing mode integrates presence detection and in-app chat. Copy is deterministic per product spec.
+                  <TabsContent
+                    value="discussion"
+                    className="mt-4 border border-border-subtle bg-bg-elevated p-4 text-sm text-fg-muted"
+                  >
+                    Pairing mode integrates presence detection and in-app chat. Copy is
+                    deterministic per product spec.
                   </TabsContent>
-                  <TabsContent value="history" className="mt-4 border border-border-subtle bg-bg-elevated p-4 text-sm text-fg-muted">
-                    Attempts persist in DynamoDB with per-test metrics and reviewer notes. UI tokens map to status categories.
+                  <TabsContent
+                    value="history"
+                    className="mt-4 border border-border-subtle bg-bg-elevated p-4 text-sm text-fg-muted"
+                  >
+                    Attempts persist in DynamoDB with per-test metrics and reviewer notes. UI tokens
+                    map to status categories.
                   </TabsContent>
                 </Tabs>
               </CardContent>
@@ -224,7 +253,9 @@ const App = () => {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="text-2xl font-semibold text-fg-default">Workspace Experience</h2>
-                <p className="text-sm text-fg-muted">The coding surface mirrors the Figma reference with pastel editor chrome.</p>
+                <p className="text-sm text-fg-muted">
+                  The coding surface mirrors the Figma reference with pastel editor chrome.
+                </p>
               </div>
               <div className="flex gap-2">
                 <Badge variant="outline">Monospace isolated</Badge>

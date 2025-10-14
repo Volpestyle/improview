@@ -37,7 +37,6 @@ export interface CodeEditorPanelProps {
   actions?: React.ReactNode;
   toolbarStart?: React.ReactNode;
   readOnly?: boolean;
-  autoFocus?: boolean;
   textareaProps?: Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'value' | 'onChange'>;
 }
 
@@ -57,7 +56,6 @@ export const CodeEditorPanel = ({
   actions,
   toolbarStart,
   readOnly,
-  autoFocus,
   textareaProps,
 }: CodeEditorPanelProps) => {
   const isControlled = typeof value === 'string';
@@ -294,7 +292,6 @@ export const CodeEditorPanel = ({
                 value={code}
                 readOnly={readOnly}
                 spellCheck={false}
-                autoFocus={autoFocus}
                 className={cn(
                   'relative z-10 min-h-full w-full resize-none whitespace-pre font-mono text-sm leading-6',
                   'bg-transparent p-4 outline-none',

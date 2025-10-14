@@ -15,14 +15,11 @@ Context: Improview is a serverless coding interview practice platform with seaml
 
 ## Product Context
 
-- **Primary flows**: (1) Generate problem → (2) Solve in two-pane workspace → (3) Run public tests → (4) Submit & review results → (5) Review history.
 - **Key personas**: SWE candidates, practicing engineers, mentors/recruiters. Expect power users who rely on keyboard shortcuts and Vim habits.
-- **Phase awareness**: follow implementation phases (docs/implementation_plan.md) so UI states exist ahead of backend milestones (e.g., mocked data during Phase 2, timer persistence Phase 4).
-- **Non-goals**: social feeds, multi-language judging (beyond JS/TS at launch), complex theme customization beyond light/dark toggle.
 
 ## Design Tokens & Theming
 
-### Token schema example
+### Token schema (EXAMPLE ONLY)
 
 Store tokens as JSON with the following shape (extend only via documented keys). Color tokens define both light and dark theme values using semantic naming:
 
@@ -143,7 +140,7 @@ Store tokens as JSON with the following shape (extend only via documented keys).
 
 ### Token governance
 
-- Tokens live in `/tokens/tokens.json` with versioning per release; designers consume via plugin referenced in docs/implementation_plan.md Phase 1.
+- Tokens live in `/tokens/tokens.json` with versioning per release; designers consume via plugin.
 - Breaking token changes require semantic version bump and deprecation notice; provide codemod when renaming tokens.
 
 ### Theme implementation
@@ -187,13 +184,6 @@ Store tokens as JSON with the following shape (extend only via documented keys).
 - **Editor actions**: keyboard equivalents for run tests (`⌘⏎` / `Ctrl+Enter`), submit (`⇧⌘⏎` / `Shift+Ctrl+Enter`), toggle hint (`?`), toggle solutions (`s`). Document shortcuts within help modal.
 - **Loading/Error surfaces**: prefer skeleton placeholders for problem pack; toasts for background successes/failures; inline error banners for blocking issues (e.g., run-tests failure).
 
-### Product-specific compositions
-
-- **Home screen**: category pills (wrap at `md`, convert to horizontal carousel <640px), difficulty chips, provider selector (radio segmented control), optional custom prompt textarea, Generate CTA pinned at bottom on mobile.
-- **Workspace layout**: 12-column grid; left pane min 40% width (statement) collapsible on `sm`; right pane houses editor + test runner; timer chip pinned top-right of statement pane; Show Hint button with safe state transitions (counts reveal).
-- **Results view**: success uses `accent.primary` glow and confetti micro animation (≤200ms); failure uses `danger` palette with call-to-action to retry; table shows Public vs Hidden tests with badges; diff viewer uses monospace font with theme-aware color tokens for syntax highlighting.
-- **History**: list view paginated; summary cards include category, difficulty, pass/fail, time spent; detail view uses Tabs for Code, Tests, Metrics.
-
 ## Copy & Content Design
 
 - Voice: concise, action-oriented, motivational; avoid jargon beyond algorithm terms.
@@ -214,6 +204,7 @@ Store tokens as JSON with the following shape (extend only via documented keys).
 
 ## Layout & Responsive Behavior
 
+- Mobile / Tablet responsive-ness is a core functional requirement.
 - Grid: 12-column with 16px base gutter; use spacing tokens for margins/padding.
 - Breakpoints: `sm` (<640px collapses workspace to stacked panes); `md` introduces dual-column layout; `lg` adds history sidebar; `xl` increases max-width to 1280px.
 - Maintain minimum interactive target 44×44px; timer chip 48×48px.
@@ -228,84 +219,6 @@ Store tokens as JSON with the following shape (extend only via documented keys).
 - **No page transition animations**: Route changes, page loads, and navigation are **instant** (0ms). Speed perception trumps smoothness for navigation.
 - **Micro-interactions everywhere**: Buttons, inputs, switches, cards, chips, tabs—anything clickable/tappable get subtle animation feedback.
 - **Loading states, not loading animations**: Show skeleton UI or spinners for async data, but never animate the page structure itself on navigation.
-
-### Mandatory Tactile Feedback Patterns
-
-Every interactive component must implement at least one of these patterns:
-
-**Buttons & CTAs:**
-
-- Press: scale(0.97) transform on `active` state (60ms duration)
-- Hover: subtle scale(1.02) + shadow elevation increase (120ms spring)
-- Focus: 2px outline with pulse animation (180ms)
-- Success state: brief scale(1.05) → scale(1.0) bounce (240ms spring)
-- Loading state: spinner replaces content, button disabled but remains same size
-
-**Input Fields:**
-
-- Focus: border color transition (120ms) + subtle shadow glow
-- Valid: green accent border fade-in (180ms)
-- Error: red border + micro shake animation (240ms)
-- Character count: live update with scale pulse on threshold approach
-
-**Toggle Components (Switch, Checkbox, Radio):**
-
-- Toggle: thumb slides with spring easing (180ms)
-- Check appearance: scale(0) → scale(1.2) → scale(1) bounce (240ms)
-- Background color transition (180ms)
-- Haptic feedback hook for mobile (via Vibration API)
-
-**Cards & Panels:**
-
-- Hover: subtle translateY(-2px) + shadow elevation (180ms)
-- Press: translateY(0) flatten (60ms)
-- Selection: border accent + scale(1.01) (120ms)
-- Dismiss: translateX with opacity fade (240ms)
-
-**Chips & Pills:**
-
-- Hover: background color brighten + scale(1.05) (120ms)
-- Press: scale(0.95) (60ms)
-- Remove: scale(0) with rotation (180ms spring)
-- Add: scale(0) → scale(1) entrance (180ms spring)
-
-**Dropdowns & Menus:**
-
-- Open: opacity 0 → 1 + translateY(-4px) → 0 (180ms)
-- Items: stagger animation on open (20ms offset per item)
-- Hover: background color transition (60ms)
-- Close: instant (0ms) or opacity fade if triggered by selection
-
-**Tabs:**
-
-- Switch: active indicator slides with spring (240ms)
-- Content: instant swap (0ms)—no fade, no slide
-- Hover: subtle background tint (120ms)
-
-**Modals & Dialogs:**
-
-- Open: backdrop opacity 0 → 1 (180ms) + dialog scale(0.95) → scale(1) (240ms spring)
-- Close: reverse animation (180ms)
-- Drag-to-dismiss on mobile: follow finger with spring resistance
-
-**Toasts & Alerts:**
-
-- Enter: slide from edge + opacity (240ms spring)
-- Exit: opacity fade + scale(0.95) (180ms)
-- Appear top-right (desktop) / bottom (mobile)
-- Auto-dismiss after 4s; success uses `success.600`, failure uses `danger.600`
-
-**Timer Widget:**
-
-- Count animation: smooth number transitions with easing
-- Warning state (10% remaining): pulsing glow effect (1s cycle)
-- Pause/Resume: icon rotation (120ms)
-
-**Progress Indicators:**
-
-- Determinate: smooth width/value transitions (180ms linear)
-- Indeterminate: continuous animation, respect reduced-motion
-- Completion: brief success color flash (120ms)
 
 ### Navigation & Page Loads (Zero Animation)
 
@@ -348,17 +261,6 @@ Every interactive component must implement at least one of these patterns:
 - **Reduced motion**: All animations must have a `prefers-reduced-motion` fallback that either removes animation entirely or reduces to instant state change with subtle opacity fade (60ms max).
 - **INP budget**: Animations cannot delay interactivity. Use `transform` and `opacity` (GPU-accelerated) only.
 
-### Animation Testing Checklist
-
-- [ ] Every interactive component has tactile feedback defined
-- [ ] Page navigation is instant (0ms)
-- [ ] Loading states use skeletons, not animated page structures
-- [ ] Reduced-motion respected (test with browser setting)
-- [ ] No layout-shifting properties animated
-- [ ] Spring animations tested on low-end devices
-- [ ] Toast timing verified (4s visibility)
-- [ ] Focus indicators animate smoothly
-
 ## Performance & Quality Budgets
 
 - Targets: Lighthouse Performance ≥95, LCP ≤2.5s, CLS ≤0.1, INP ≤200ms on mid-tier hardware.
@@ -399,19 +301,6 @@ Every interactive component must implement at least one of these patterns:
 - Use semantic versioning for component packages; document deprecations and provide codemods for breaking changes.
 - Handoff artifacts: Figma spec link, Storybook URL, token diff, and test results summary.
 
-## Agent-Specific Operating Rules
-
-- Stack defaults: React + TypeScript (strict), Tailwind + CSS variables from tokens, shadcn/ui primitives allowed; avoid CSS-in-JS unless explicitly requested.
-- File layout:
-  - `/components/{Component}/index.ts`
-  - `/components/{Component}/{Component}.tsx`
-  - `/components/{Component}/{Component}.stories.tsx`
-  - `/components/{Component}/{Component}.test.tsx`
-  - `/components/{Component}/a11y.spec.ts`
-  - `/tokens/tokens.json`
-- Prompting contract: use tokens for all spacing/color/radius; implement keyboard and aria patterns before exporting; enforce variant names; generate stories and tests with each component; refuse to ship if a11y or perf budgets fail—return remediation report instead.
-- Definition of Done: axe + keyboard checks pass, bundle budgets met, stories and RTL tests present, types exported/documented, no console errors, lint/format clean.
-
 ## Error Handling & Empty States
 
 - Standardized errors: network error (retry with provider switch), auth error (prompt re-login), validation error (show inline), 404 (problem missing), 500 (generic failure with retry + contact link).
@@ -446,8 +335,6 @@ Every interactive component must implement at least one of these patterns:
   - Visual regression tests pass for both light and dark modes.
 
 - **Page template checklist**:
-  - Landmark roles (header/main/nav/footer) present.
-  - Page has single `h1`; headings in logical order.
   - Skip-to-content link visible on focus.
   - Responsive layouts validated at sm/md/lg/xl.
   - Analytics events instrumented for critical interactions.

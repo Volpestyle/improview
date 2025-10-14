@@ -13,8 +13,12 @@
       "require": "./dist/index.cjs"
     },
     "./styles": {
-      "import": "./src/styles/theme.css",
-      "require": "./src/styles/theme.css"
+      "import": "./dist/theme.css",
+      "require": "./dist/theme.css"
+    },
+    "./styles/fonts": {
+      "import": "./dist/fonts.css",
+      "require": "./dist/fonts.css"
     },
     "./tokens": {
       "import": "./src/theme/tokens.json",
@@ -25,6 +29,7 @@
     "dist",
     "src/styles",
     "src/theme/tokens.json",
+    "src/assets",
     "docs",
     "demo"
   ],
@@ -77,6 +82,7 @@
     "cmdk": "^1.1.1",
     "embla-carousel-react": "^8.6.0",
     "framer-motion": "^11.0.17",
+    "geist": "^1.5.1",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.487.0",
     "react-day-picker": "^8.10.1",

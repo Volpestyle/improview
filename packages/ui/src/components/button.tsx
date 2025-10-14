@@ -9,7 +9,6 @@ const buttonVariants = cva(
     'justify-center',
     'rounded-md',
     'text-sm',
-    'font-medium',
     'transition-colors',
     'focus-visible:outline-none',
     'focus-visible:ring-2',
@@ -51,6 +50,17 @@ const buttonVariants = cva(
           'text-fg-default',
           'focus-visible:ring-border-focus',
         ),
+        selectable: cn(
+          'border',
+          'border-border-subtle',
+          'bg-transparent',
+          'text-fg-default',
+          'aria-[pressed=true]:border-transparent',
+          'aria-[pressed=true]:bg-accent',
+          'aria-[pressed=true]:text-fg-inverse',
+          'aria-[pressed=false]:hover:bg-bg-panel/60',
+          'focus-visible:ring-accent',
+        ),
         destructive: cn(
           'bg-danger-600',
           'text-fg-inverse',
@@ -68,6 +78,7 @@ const buttonVariants = cva(
       weight: {
         normal: 'font-medium',
         semibold: 'font-semibold',
+        bold: 'font-bold',
       },
     },
     compoundVariants: [
@@ -80,7 +91,7 @@ const buttonVariants = cva(
     defaultVariants: {
       variant: 'primary',
       size: 'md',
-      weight: 'semibold',
+      weight: 'bold',
     },
   },
 );

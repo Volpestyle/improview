@@ -1,6 +1,6 @@
 import { cn } from '../utils/cn';
 
-export interface SkipLinkProps extends React.AnchorHTMLAttributes<HTMLAnchorElement> {}
+export type SkipLinkProps = React.AnchorHTMLAttributes<HTMLAnchorElement>;
 
 export const SkipLink = ({ className, children = 'Skip to content', ...props }: SkipLinkProps) => (
   <a
