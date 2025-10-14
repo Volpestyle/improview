@@ -10,7 +10,6 @@ const DEFAULT_ENV = process.env.GITHUB_DEFAULT_ENV || 'dev';
 
 const EXCLUDED_KEYS = new Set();
 const EXCLUDED_PREFIXES = [];
-const EXCLUDED_SUFFIXES = ['_API_KEY'];
 
 const VALID_SCOPES = new Set(['repo', 'env', 'all']);
 
@@ -241,9 +240,6 @@ function shouldSync(name, value) {
   if (EXCLUDED_PREFIXES.some((prefix) => name.startsWith(prefix))) {
     return false;
   }
-  if (EXCLUDED_SUFFIXES.some((suffix) => name.endsWith(suffix))) {
-    return false;
-  }
   const trimmed =
     typeof value === 'string' ? value.trim() : value == null ? '' : String(value).trim();
   return trimmed.length > 0;
@@ -275,13 +271,11 @@ function parseEnvWithSections(filePath) {
     const trimmed = line.trim();
     if (trimmed === '# REPO SECRETS') {
       currentSection = 'repoSecrets';
-    } else if (trimmed === '# REPO') {
-      currentSection = 'repoSecrets';
-    } else if (trimmed === '# VARS') {
+    } else if (trimmed === '# REPO VARS') {
       currentSection = 'repoVars';
-    } else if (trimmed === '# SECRETS') {
+    } else if (trimmed === '# SECRETS' || trimmed === '# ENV SECRETS') {
       currentSection = 'envSecrets';
-    } else if (trimmed === '# ENV VARS') {
+    } else if (trimmed === '# VARS' || trimmed === '# ENV VARS') {
       currentSection = 'envVars';
     } else if (trimmed.toUpperCase().startsWith('# DONT SYNC')) {
       currentSection = 'dontSync';

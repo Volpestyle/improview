@@ -168,7 +168,7 @@ jobs:
             echo "Secrets Manager entry ${secret_name} not found; skipping upsert."
             exit 0
           fi
-          payload="$(python3 -c 'import json, os; data = {}; openai = os.environ.get(\"OPENAI_API_KEY\", \"\").strip(); if openai: data[\"openaiApiKey\"] = openai; grok = os.environ.get(\"GROK_API_KEY\", \"\").strip(); if grok: data[\"grokApiKey\"] = grok; print(json.dumps(data))')"
+          payload="$(python3 -c 'import json, os; data = {}; openai = os.environ.get("OPENAI_API_KEY", "").strip(); grok = os.environ.get("GROK_API_KEY", "").strip(); data.update({k: v for k, v in [("openaiApiKey", openai), ("grokApiKey", grok)] if v}); print(json.dumps(data))')"
           if [ "${payload}" = "{}" ]; then
             echo "No provider API keys provided; skipping secret update."
             exit 0
@@ -418,7 +418,7 @@ jobs:
             echo "Secrets Manager entry ${secret_name} not found; skipping upsert."
             exit 0
           fi
-          payload="$(python3 -c 'import json, os; data = {}; openai = os.environ.get(\"OPENAI_API_KEY\", \"\").strip(); if openai: data[\"openaiApiKey\"] = openai; grok = os.environ.get(\"GROK_API_KEY\", \"\").strip(); if grok: data[\"grokApiKey\"] = grok; print(json.dumps(data))')"
+          payload="$(python3 -c 'import json, os; data = {}; openai = os.environ.get("OPENAI_API_KEY", "").strip(); grok = os.environ.get("GROK_API_KEY", "").strip(); data.update({k: v for k, v in [("openaiApiKey", openai), ("grokApiKey", grok)] if v}); print(json.dumps(data))')"
           if [ "${payload}" = "{}" ]; then
             echo "No provider API keys provided; skipping secret update."
             exit 0
