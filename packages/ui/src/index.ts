@@ -1,19 +1,15 @@
-export * from './theme/applyTokens';
-export * from './theme/themes';
+/**
+ * Improview UI Design System
+ * Pastel-first, tactile, accessible component library
+ */
 
-// Components
-export * from './components/Button';
-export * from './components/IconButton';
-export * from './components/Input';
-export * from './components/TextArea';
-export * from './components/Select';
-export * from './components/Chip';
-export * from './components/Tabs';
-export * from './components/Accordion';
-export * from './components/Disclosure';
+// Theme exports
+export * from './theme';
+export { default as tokens } from './theme/tokens.json';
+
+// Component exports
+export * from './components/ui';
 export * from './components/Card';
-export * from './components/Tag';
-export * from './components/Timer';
-export * from './components/Toast';
-export * from './components/Skeleton';
-export * from './components/Spinner';
+
+// Styles
+import './styles/theme.css';

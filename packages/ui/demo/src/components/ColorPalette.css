@@ -1,0 +1,49 @@
+/**
+ * Color Palette Styles
+ * Using Card component for layout, only swatch-specific styles here
+ */
+
+.color-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-4);
+}
+
+/* Color swatch display area */
+.color-card__swatch {
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+/* Copied feedback */
+.color-card__copied {
+  position: absolute;
+  padding: var(--space-2) var(--space-4);
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  animation: color-card-fade-in var(--motion-duration-base) var(--motion-easing-spring);
+}
+
+@keyframes color-card-fade-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .color-grid {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  }
+}

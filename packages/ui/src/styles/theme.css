@@ -1,0 +1,91 @@
+/**
+ * Improview UI Design System - Theme Styles
+ * Generated from design tokens
+ */
+
+:root {
+  /* Colors will be injected via CSS variables */
+  /* See theme/index.ts for generation logic */
+
+  /* Default to light theme */
+  color-scheme: light;
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+/* Base styles */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-regular);
+  line-height: 1.5;
+  color: var(--color-fg-default);
+  background-color: var(--color-bg-default);
+  transition:
+    background-color var(--motion-duration-base) var(--motion-easing-in-out),
+    color var(--motion-duration-base) var(--motion-easing-in-out);
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Focus visible styles */
+:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+/* Selection colors */
+::selection {
+  background-color: var(--color-accent-primary);
+  color: var(--color-fg-inverse);
+}
+
+/* Scrollbar styles (webkit) */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg-sunken);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-default);
+  border-radius: var(--radius-sm);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-border-subtle);
+}
+
+/* Print styles */
+@media print {
+  [data-theme='dark'] {
+    color-scheme: light;
+  }
+}

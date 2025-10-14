@@ -1,0 +1,39 @@
+/**
+ * Demo App Layout
+ */
+
+.demo-app {
+  min-height: 100vh;
+  position: relative;
+}
+
+.demo-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: var(--space-12) var(--space-6);
+}
+
+/* Section Styles - Shared across components */
+.demo-section {
+  margin-bottom: var(--space-12);
+}
+
+.demo-section__title {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-2);
+  border-bottom: 2px solid var(--color-border-default);
+}
+
+.demo-section__description {
+  color: var(--color-fg-muted);
+  margin-bottom: var(--space-6);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .demo-container {
+    padding: var(--space-8) var(--space-4);
+  }
+}

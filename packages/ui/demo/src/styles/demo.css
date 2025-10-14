@@ -1,0 +1,67 @@
+/**
+ * Demo App Styles
+ */
+
+@import '../../../src/styles/theme.css';
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--color-bg-default);
+  color: var(--color-fg-default);
+  transition:
+    background-color var(--motion-duration-base) var(--motion-easing-in-out),
+    color var(--motion-duration-base) var(--motion-easing-in-out);
+}
+
+/* Typography */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.2;
+}
+
+h1 {
+  font-size: var(--font-size-2xl);
+  margin-bottom: var(--space-2);
+}
+
+h2 {
+  font-size: var(--font-size-xl);
+  margin-bottom: var(--space-4);
+}
+
+h3 {
+  font-size: var(--font-size-lg);
+  margin-bottom: var(--space-3);
+}
+
+p {
+  line-height: 1.6;
+  color: var(--color-fg-muted);
+}
+
+a {
+  color: var(--color-accent-primary);
+  text-decoration: none;
+  transition: color var(--motion-duration-base) var(--motion-easing-in-out);
+}
+
+a:hover {
+  color: var(--color-accent-emphasis);
+}
+
+/* Selection */
+::selection {
+  background: var(--color-accent-primary);
+  color: var(--color-fg-inverse);
+}

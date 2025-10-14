@@ -1,0 +1,132 @@
+.improview-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-sm);
+  line-height: 1;
+  letter-spacing: 0.01em;
+  text-decoration: none;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition:
+    background-color var(--motion-duration-fast) var(--motion-easing-in-out),
+    color var(--motion-duration-fast) var(--motion-easing-in-out),
+    border-color var(--motion-duration-fast) var(--motion-easing-in-out),
+    box-shadow var(--motion-duration-fast) var(--motion-easing-in-out),
+    transform 120ms ease;
+  user-select: none;
+  position: relative;
+  outline: none;
+}
+
+.improview-button:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-border-focus) 60%, transparent);
+}
+
+.improview-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.improview-button svg {
+  pointer-events: none;
+  flex-shrink: 0;
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.improview-button--size-sm {
+  min-height: 2.25rem;
+  padding: 0 var(--space-3);
+}
+
+.improview-button--size-default {
+  min-height: 2.5rem;
+  padding: 0 var(--space-4);
+}
+
+.improview-button--size-lg {
+  min-height: 2.75rem;
+  padding: 0 var(--space-5);
+  font-size: var(--font-size-md);
+}
+
+.improview-button--size-icon {
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+}
+
+.improview-button--default {
+  background: var(--color-accent-primary);
+  color: var(--color-fg-inverse);
+  border-color: var(--color-accent-primary);
+}
+
+.improview-button--default:hover:not(:disabled) {
+  background: var(--color-accent-emphasis);
+  border-color: var(--color-accent-emphasis);
+}
+
+.improview-button--secondary {
+  background: color-mix(in srgb, var(--color-accent-soft) 55%, transparent);
+  color: var(--color-fg-default);
+  border-color: color-mix(in srgb, var(--color-border-default) 65%, transparent);
+}
+
+.improview-button--secondary:hover:not(:disabled) {
+  background: var(--color-accent-soft);
+}
+
+.improview-button--outline {
+  background: transparent;
+  color: var(--color-fg-default);
+  border-color: var(--color-border-default);
+}
+
+.improview-button--outline:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-accent-soft) 30%, transparent);
+}
+
+.improview-button--ghost {
+  background: transparent;
+  color: var(--color-fg-default);
+}
+
+.improview-button--ghost:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-accent-soft) 35%, transparent);
+}
+
+.improview-button--destructive {
+  background: var(--color-danger-600);
+  color: var(--color-fg-inverse);
+  border-color: var(--color-danger-600);
+}
+
+.improview-button--destructive:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-danger-600) 85%, black 15%);
+  border-color: color-mix(in srgb, var(--color-danger-600) 90%, black 10%);
+}
+
+.improview-button--link {
+  background: transparent;
+  color: var(--color-accent-primary);
+  border-color: transparent;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.improview-button--link:hover:not(:disabled) {
+  color: var(--color-accent-emphasis);
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
+.improview-button[data-state='on'] {
+  transform: translateY(1px);
+}

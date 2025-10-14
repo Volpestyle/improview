@@ -1,0 +1,29 @@
+/**
+ * Philosophy Box Styles
+ */
+
+.philosophy {
+  padding: var(--space-6);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-8);
+  border-left: 4px solid var(--color-accent-primary);
+  background: var(--color-bg-elevated);
+  box-shadow: var(--shadow-sm);
+}
+
+.philosophy h3 {
+  color: var(--color-accent-primary);
+  margin-bottom: var(--space-3);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+}
+
+.philosophy p {
+  color: var(--color-fg-default);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.philosophy__paragraph {
+  margin-top: var(--space-3);
+}
