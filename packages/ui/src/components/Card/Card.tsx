@@ -1,44 +1,71 @@
-import clsx from 'clsx';
+import { forwardRef } from 'react';
+import { motion } from 'framer-motion';
+import { CardProps } from './Card.types';
+import './Card.css';
 
-export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
-  heading?: React.ReactNode;
-  description?: React.ReactNode;
-  actions?: React.ReactNode;
-  padding?: 'none' | 'sm' | 'md' | 'lg';
-}
-
-const PADDING_MAP: Record<NonNullable<CardProps['padding']>, string> = {
-  none: 'p-0',
-  sm: 'p-4',
-  md: 'p-6',
-  lg: 'p-8',
-};
-
-export const Card = ({
-  heading,
-  description,
-  actions,
-  className,
-  children,
-  padding = 'md',
-  ...rest
-}: CardProps) => (
-  <div
-    {...rest}
-    className={clsx(
-      'rounded-lg border border-border-subtle bg-bg-panel shadow-sm transition-colors',
+export const Card = forwardRef<HTMLDivElement, CardProps>(
+  (
+    {
+      media,
+      title,
+      subtitle,
+      children,
+      footer,
+      interactive = false,
+      onClick,
+      className = '',
+      variant = 'default',
+      ...props
+    },
+    ref,
+  ) => {
+    const classes = [
+      'improview-card',
+      `improview-card--${variant}`,
+      interactive && 'improview-card--interactive',
       className,
-    )}
-  >
-    {(heading || description || actions) && (
-      <div className={clsx('flex flex-col gap-2 border-b border-border-subtle p-4 md:flex-row md:items-center md:justify-between md:gap-4')}>
-        <div className="flex flex-col gap-1">
-          {heading ? <h3 className="text-lg font-semibold text-fg">{heading}</h3> : null}
-          {description ? <p className="text-sm text-fg-muted">{description}</p> : null}
-        </div>
-        {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
-      </div>
-    )}
-    <div className={clsx(PADDING_MAP[padding])}>{children}</div>
-  </div>
+    ]
+      .filter(Boolean)
+      .join(' ');
+
+    const motionProps = interactive
+      ? {
+          whileHover: { scale: 1.02 },
+          whileTap: { scale: 0.98 },
+          transition: {
+            duration: 0.06,
+            ease: 'easeInOut',
+          },
+        }
+      : {};
+
+    const Component = interactive ? motion.div : 'div';
+
+    return (
+      <Component
+        ref={ref}
+        className={classes}
+        onClick={onClick}
+        role={interactive ? 'button' : undefined}
+        tabIndex={interactive ? 0 : undefined}
+        {...(motionProps as any)}
+        {...(props as any)}
+      >
+        {media && <div className="improview-card__media">{media}</div>}
+
+        {(title || subtitle) && (
+          <div className="improview-card__header">
+            {title && <h3 className="improview-card__title">{title}</h3>}
+            {subtitle && <p className="improview-card__subtitle">{subtitle}</p>}
+          </div>
+        )}
+
+        {children && <div className="improview-card__body">{children}</div>}
+
+        {footer && <div className="improview-card__footer">{footer}</div>}
+      </Component>
+    );
+  },
 );
+
+Card.displayName = 'Card';
