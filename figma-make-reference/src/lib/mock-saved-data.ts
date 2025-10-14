@@ -1,0 +1,38 @@
+export const mockSavedProblems = [
+  {
+    id: 'saved_001',
+    user_id: 'user_001',
+    problem_id: 'prob_001',
+    problem_title: 'Shortest Path in Binary Matrix',
+    category: 'bfs-dfs',
+    difficulty: 'medium' as const,
+    started_at: '2024-10-14T14:30:00Z',
+    ended_at: '2024-10-14T14:52:00Z',
+    duration_ms: 1320000,
+    passed: true,
+    pass_count: 8,
+    fail_count: 0,
+    hint_used: false,
+    code: `function shortestPathBinaryMatrix(grid) { /* ... */ }`,
+    saved_at: '2024-10-14T15:00:00Z',
+    lists: ['list_002'], // In "Graph Algorithms" list
+  },
+  {
+    id: 'saved_002',
+    user_id: 'user_001',
+    problem_id: 'prob_004',
+    problem_title: 'Merge K Sorted Lists',
+    category: 'heaps',
+    difficulty: 'hard' as const,
+    started_at: '2024-10-11T09:30:00Z',
+    ended_at: '2024-10-11T10:45:00Z',
+    duration_ms: 4500000,
+    passed: true,
+    pass_count: 6,
+    fail_count: 0,
+    hint_used: true,
+    code: `function mergeKLists(lists) { /* ... */ }`,
+    saved_at: '2024-10-11T11:00:00Z',
+    lists: ['list_003'], // In "Hard Problems Collection" list
+  },
+];

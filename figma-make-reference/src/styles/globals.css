@@ -1,0 +1,296 @@
+@custom-variant dark (&:is(.dark *));
+
+/* Design Tokens - Light Theme */
+:root,
+[data-theme="light"] {
+  --font-size: 16px;
+  
+  /* Semantic colors from tokens */
+  --bg-default: #FBF1C7;
+  --bg-panel: #F2E5BC;
+  --bg-sunken: #EBDBB2;
+  --bg-elevated: #FFFFFF;
+  
+  --fg-default: #1C1C1C;
+  --fg-muted: #504945;
+  --fg-subtle: #7C6F64;
+  --fg-inverse: #FBF1C7;
+  
+  --accent-primary: #83A598;
+  --accent-emphasis: #689D6A;
+  --accent-soft: #B8D4CB;
+  
+  --info-600: #76A9D8;
+  --info-soft: #B3D4ED;
+  --success-600: #689D6A;
+  --success-soft: #A8CEA1;
+  --warning-600: #D79921;
+  --warning-soft: #F2CC8F;
+  --danger-600: #CC241D;
+  --danger-soft: #F5A9A3;
+  
+  --border-default: #D5C4A1;
+  --border-subtle: #E5D5B7;
+  --border-focus: #83A598;
+  
+  --shadow-sm: 0 2px 6px rgba(60, 56, 54, 0.08);
+  --shadow-md: 0 8px 20px rgba(60, 56, 54, 0.12);
+  
+  /* Shadcn compatibility */
+  --background: #FBF1C7;
+  --foreground: #1C1C1C;
+  --card: #F2E5BC;
+  --card-foreground: #1C1C1C;
+  --popover: #FFFFFF;
+  --popover-foreground: #1C1C1C;
+  --popover-shadow: 0 10px 40px rgba(60, 56, 54, 0.16);
+  --primary: #83A598;
+  --primary-foreground: #FBF1C7;
+  --secondary: #EBDBB2;
+  --secondary-foreground: #1C1C1C;
+  --muted: #EBDBB2;
+  --muted-foreground: #504945;
+  --accent: #83A598;
+  --accent-foreground: #FBF1C7;
+  --destructive: #CC241D;
+  --destructive-foreground: #FBF1C7;
+  --border: #D5C4A1;
+  --input: #F2E5BC;
+  --ring: #83A598;
+  
+  --font-weight-medium: 500;
+  --font-weight-normal: 400;
+}
+
+/* Design Tokens - Dark Theme */
+[data-theme="dark"] {
+  /* Semantic colors from tokens */
+  --bg-default: #1C1C1C;
+  --bg-panel: #282828;
+  --bg-sunken: #161616;
+  --bg-elevated: #323232;
+  
+  --fg-default: #EBDBB2;
+  --fg-muted: #A89984;
+  --fg-subtle: #928374;
+  --fg-inverse: #1C1C1C;
+  
+  --accent-primary: #83A598;
+  --accent-emphasis: #8EC07C;
+  --accent-soft: #5A7E72;
+  
+  --info-600: #7DAEA3;
+  --info-soft: #5A8A7E;
+  --success-600: #8EC07C;
+  --success-soft: #6A9A60;
+  --warning-600: #FABD2F;
+  --warning-soft: #D79921;
+  --danger-600: #FB4934;
+  --danger-soft: #CC241D;
+  
+  --border-default: #3C3836;
+  --border-subtle: #504945;
+  --border-focus: #83A598;
+  
+  --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.32);
+  --shadow-md: 0 8px 20px rgba(0, 0, 0, 0.48);
+  
+  /* Shadcn compatibility */
+  --background: #1C1C1C;
+  --foreground: #EBDBB2;
+  --card: #282828;
+  --card-foreground: #EBDBB2;
+  --popover: #323232;
+  --popover-foreground: #EBDBB2;
+  --popover-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+  --primary: #83A598;
+  --primary-foreground: #1C1C1C;
+  --secondary: #282828;
+  --secondary-foreground: #EBDBB2;
+  --muted: #282828;
+  --muted-foreground: #A89984;
+  --accent: #83A598;
+  --accent-foreground: #1C1C1C;
+  --destructive: #FB4934;
+  --destructive-foreground: #EBDBB2;
+  --border: #3C3836;
+  --input: #282828;
+  --ring: #83A598;
+}
+
+/* Shared tokens */
+:root {
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius: 12px;
+  
+  /* Motion tokens */
+  --duration-instant: 0ms;
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+  --duration-slow: 240ms;
+  --easing-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --easing-spring: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-input-background: var(--input-background);
+  --color-switch-background: var(--switch-background);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+    outline-color: var(--border-focus);
+    outline-width: 2px;
+    outline-offset: 2px;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    transition: background-color var(--duration-base) var(--easing-in-out),
+                color var(--duration-base) var(--easing-in-out);
+  }
+  
+  /* Respect reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+    
+    body {
+      transition: none;
+    }
+  }
+  
+  /* Focus visible styles */
+  *:focus-visible {
+    outline: 2px solid var(--border-focus);
+    outline-offset: 2px;
+  }
+  
+  /* Never suppress focus indicators */
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible {
+    outline: 2px solid var(--border-focus);
+    outline-offset: 2px;
+  }
+}
+
+/**
+ * Base typography. This is not applied to elements which have an ancestor with a Tailwind text class.
+ */
+@layer base {
+  :where(:not(:has([class*=" text-"]), :not(:has([class^="text-"])))) {
+    h1 {
+      font-size: var(--text-2xl);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
+
+    h2 {
+      font-size: var(--text-xl);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
+
+    h3 {
+      font-size: var(--text-lg);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
+
+    h4 {
+      font-size: var(--text-base);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
+
+    p {
+      font-size: var(--text-base);
+      font-weight: var(--font-weight-normal);
+      line-height: 1.5;
+    }
+
+    label {
+      font-size: var(--text-base);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
+
+    button {
+      font-size: var(--text-base);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
+
+    input {
+      font-size: var(--text-base);
+      font-weight: var(--font-weight-normal);
+      line-height: 1.5;
+    }
+  }
+}
+
+html {
+  font-size: var(--font-size);
+}
+
+body {
+  font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.font-mono {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+}
+
+/* Ensure dropdown menus are visible and have proper styling */
+[data-slot="dropdown-menu-content"] {
+  z-index: 9999 !important;
+  box-shadow: var(--popover-shadow, var(--shadow-md)) !important;
+}
