@@ -11,6 +11,7 @@ npm-debug.log
 # Local environment files
 .env
 .env.*
+!.env.example
 backend/.env
 backend/.env.*
 backend/tmp/
@@ -24,3 +25,6 @@ apps/**/dist/
 
 # CDK synthesized assets
 infra/cdk/cdk.out/
+
+# Frontend dev cache
+apps/web/.vite/

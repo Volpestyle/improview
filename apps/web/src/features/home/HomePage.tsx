@@ -3,8 +3,20 @@ import { useNavigate } from '@tanstack/react-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button, Card, Chip, Select, TextArea, useToast } from '@improview/ui';
 import { apiClient } from '../../api/client';
+import { ApiError } from '../../api/errors';
 import { GenerateRequest } from '../../api/types';
 import { recordAttemptStart } from '../../storage/history';
+
+const API_MODES = ['static', 'llm'] as const;
+type ApiMode = (typeof API_MODES)[number];
+
+const configuredApiMode: ApiMode | undefined = (() => {
+  const raw = (import.meta.env.VITE_API_MODE as string | undefined)?.toLowerCase();
+  if (!raw) {
+    return undefined;
+  }
+  return API_MODES.find((mode) => mode === raw) ?? undefined;
+})();
 
 const categoryOptions = [
   { value: 'arrays', label: 'Arrays' },
@@ -34,6 +46,9 @@ export const HomePage = () => {
   const [difficulty, setDifficulty] = useState('medium');
   const [provider, setProvider] = useState(providerOptions[0]?.value ?? 'openai');
   const [customPrompt, setCustomPrompt] = useState('');
+  const apiBaseUrl =
+    (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:8080';
+  const usingLocalApi = /localhost|127\.0\.0\.1/.test(apiBaseUrl);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { publish } = useToast();
@@ -47,6 +62,9 @@ export const HomePage = () => {
       };
       if (customPrompt.trim()) {
         payload.customPrompt = customPrompt.trim();
+      }
+      if (configuredApiMode) {
+        payload.mode = configuredApiMode;
       }
 
       const generateResponse = await apiClient.generate(payload);
@@ -84,6 +102,14 @@ export const HomePage = () => {
     },
     onError: (error) => {
       console.error(error);
+      if (error instanceof ApiError && error.status === 401) {
+        publish({
+          title: 'Session expired',
+          description: 'Please sign in again to generate a new workspace.',
+          variant: 'error',
+        });
+        return;
+      }
       publish({
         title: 'Generation failed',
         description: 'Please try again or switch providers.',
@@ -199,10 +225,11 @@ export const HomePage = () => {
             <div className="flex flex-col gap-1 text-sm text-fg-muted">
               <span className="font-medium text-fg">Run mode</span>
               <span>
-                {import.meta.env.VITE_API_MODE === 'live'
-                  ? 'Live requests against the deployed backend.'
-                  : 'Using local mock responses for ultra-fast iteration.'}
+                {usingLocalApi
+                  ? 'Requests target your local API server.'
+                  : 'Requests hit the deployed API endpoint.'}
               </span>
+              <span className="text-xs text-fg-muted">{apiBaseUrl}</span>
             </div>
             <Button size="lg" onClick={handleGenerate} loading={mutation.isPending}>
               {mutation.isPending ? 'Generating…' : 'Generate workspace'}

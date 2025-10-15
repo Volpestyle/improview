@@ -7,12 +7,199 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"os"
 	"strings"
 
 	"improview/backend/internal/api"
 	"improview/backend/internal/domain"
+	"improview/backend/internal/jsonfmt"
 )
+
+var jsonValueSchema = map[string]any{
+	"anyOf": []any{
+		map[string]any{"type": "string"},
+		map[string]any{"type": "number"},
+		map[string]any{"type": "integer"},
+		map[string]any{"type": "boolean"},
+		map[string]any{"type": "null"},
+		map[string]any{
+			"type":  "array",
+			"items": map[string]any{"$ref": "#/$defs/json_value"},
+		},
+		map[string]any{
+			"type":                 "object",
+			"additionalProperties": map[string]any{"$ref": "#/$defs/json_value"},
+		},
+	},
+}
+
+var exampleJSONSchema = map[string]any{
+	"type":                 "object",
+	"additionalProperties": false,
+	"required":             []string{"input", "output", "explanation"},
+	"properties": map[string]any{
+		"input": map[string]any{
+			"type":  "array",
+			"items": map[string]any{"$ref": "#/$defs/json_value"},
+		},
+		"output": map[string]any{
+			"$ref": "#/$defs/json_value",
+		},
+		"explanation": map[string]any{
+			"type": "string",
+		},
+	},
+}
+
+var problemPackJSONSchema = map[string]any{
+	"type":                 "object",
+	"additionalProperties": false,
+	"required": []string{
+		"problem",
+		"api",
+		"time_estimate_minutes",
+		"hint",
+		"solutions",
+		"tests",
+	},
+	"properties": map[string]any{
+		"problem": map[string]any{
+			"type":                 "object",
+			"additionalProperties": false,
+			"required": []string{
+				"title",
+				"statement",
+				"constraints",
+				"examples",
+				"edge_cases",
+			},
+			"properties": map[string]any{
+				"title": map[string]any{
+					"type": "string",
+				},
+				"statement": map[string]any{
+					"type": "string",
+				},
+				"constraints": map[string]any{
+					"type":  "array",
+					"items": map[string]any{"type": "string"},
+				},
+				"examples": map[string]any{
+					"type":  "array",
+					"items": exampleJSONSchema,
+				},
+				"edge_cases": map[string]any{
+					"type":  "array",
+					"items": map[string]any{"type": "string"},
+				},
+			},
+		},
+		"api": map[string]any{
+			"type":                 "object",
+			"additionalProperties": false,
+			"required": []string{
+				"function_name",
+				"signature",
+				"params",
+				"returns",
+			},
+			"properties": map[string]any{
+				"function_name": map[string]any{
+					"type": "string",
+				},
+				"signature": map[string]any{
+					"type": "string",
+				},
+				"params": map[string]any{
+					"type": "array",
+					"items": map[string]any{
+						"type":                 "object",
+						"additionalProperties": false,
+						"required":             []string{"name", "type", "desc"},
+						"properties": map[string]any{
+							"name": map[string]any{"type": "string"},
+							"type": map[string]any{"type": "string"},
+							"desc": map[string]any{"type": "string"},
+						},
+					},
+				},
+				"returns": map[string]any{
+					"type":                 "object",
+					"additionalProperties": false,
+					"required":             []string{"type", "desc"},
+					"properties": map[string]any{
+						"type": map[string]any{"type": "string"},
+						"desc": map[string]any{"type": "string"},
+					},
+				},
+			},
+		},
+		"time_estimate_minutes": map[string]any{
+			"type":    "integer",
+			"minimum": 1,
+			"maximum": 120,
+		},
+		"hint": map[string]any{
+			"type": "string",
+		},
+		"solutions": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type":                 "object",
+				"additionalProperties": false,
+				"required": []string{
+					"approach",
+					"complexity",
+					"code",
+				},
+				"properties": map[string]any{
+					"approach": map[string]any{"type": "string"},
+					"complexity": map[string]any{
+						"type":                 "object",
+						"additionalProperties": false,
+						"required":             []string{"time", "space"},
+						"properties": map[string]any{
+							"time":  map[string]any{"type": "string"},
+							"space": map[string]any{"type": "string"},
+						},
+					},
+					"code": map[string]any{"type": "string"},
+				},
+			},
+		},
+		"tests": map[string]any{
+			"type":                 "object",
+			"additionalProperties": false,
+			"required":             []string{"public", "hidden"},
+			"properties": map[string]any{
+				"public": map[string]any{
+					"type":  "array",
+					"items": exampleJSONSchema,
+				},
+				"hidden": map[string]any{
+					"type":  "array",
+					"items": exampleJSONSchema,
+				},
+			},
+		},
+	},
+	"$defs": map[string]any{
+		"json_value": jsonValueSchema,
+	},
+}
+
+func newProblemPackResponseFormat() responseFormat {
+	return responseFormat{
+		Type: "json_schema",
+		JSONSchema: &responseJSONSchema{
+			Name:   "problem_pack",
+			Strict: true,
+			Schema: problemPackJSONSchema,
+		},
+	}
+}
 
 // LLMProblemGenerator talks to an LLM provider to create fresh problem packs.
 type LLMProblemGenerator struct {
@@ -51,7 +238,12 @@ func NewLLMProblemGenerator(opts LLMOptions) (*LLMProblemGenerator, error) {
 		temperature = 0.2
 	}
 
-	client := &http.Client{Timeout: timeout}
+	client := opts.HTTPClient
+	if client == nil {
+		client = &http.Client{Timeout: timeout}
+	} else if client.Timeout == 0 {
+		client.Timeout = timeout
+	}
 
 	return &LLMProblemGenerator{
 		client:      client,
@@ -69,6 +261,21 @@ func (g *LLMProblemGenerator) Generate(ctx context.Context, req api.GenerateRequ
 		return domain.ProblemPack{}, api.ErrNotImplemented
 	}
 
+	baseURL := g.baseURL
+	model := g.model
+	provider := g.provider
+	if req.LLM != nil {
+		if trimmed := strings.TrimSpace(req.LLM.BaseURL); trimmed != "" {
+			baseURL = strings.TrimRight(trimmed, "/")
+		}
+		if trimmed := strings.TrimSpace(req.LLM.Model); trimmed != "" {
+			model = trimmed
+		}
+		if trimmed := strings.TrimSpace(req.LLM.Provider); trimmed != "" {
+			provider = trimmed
+		}
+	}
+
 	category := strings.TrimSpace(req.Category)
 	difficulty := strings.TrimSpace(req.Difficulty)
 	if category == "" || difficulty == "" {
@@ -76,12 +283,12 @@ func (g *LLMProblemGenerator) Generate(ctx context.Context, req api.GenerateRequ
 	}
 
 	payload := chatCompletionRequest{
-		Model:          g.model,
-		ResponseFormat: responseFormat{Type: "json_object"},
+		Model:          model,
+		ResponseFormat: newProblemPackResponseFormat(),
 		Temperature:    g.temperature,
 		Messages: []chatMessage{
-			{Role: "system", Content: g.systemPrompt(category, difficulty)},
-			{Role: "user", Content: g.userPrompt(category, difficulty, req.CustomPrompt, req.Provider)},
+			{Role: "system", Content: g.systemPrompt(category, difficulty, provider)},
+			{Role: "user", Content: g.userPrompt(category, difficulty, req.CustomPrompt, req.Provider, provider)},
 		},
 	}
 
@@ -90,7 +297,12 @@ func (g *LLMProblemGenerator) Generate(ctx context.Context, req api.GenerateRequ
 		return domain.ProblemPack{}, fmt.Errorf("llm generator: marshal request: %w", err)
 	}
 
-	endpoint := g.baseURL + "/chat/completions"
+	if baseURL == "" {
+		return domain.ProblemPack{}, errors.New("llm generator: missing base URL")
+	}
+
+	endpoint := baseURL + "/chat/completions"
+	g.logf("POST %s payload=%s", endpoint, jsonfmt.FormatForLog(body, jsonfmt.DefaultLogLimit))
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return domain.ProblemPack{}, fmt.Errorf("llm generator: create request: %w", err)
@@ -109,6 +321,8 @@ func (g *LLMProblemGenerator) Generate(ctx context.Context, req api.GenerateRequ
 	if err != nil {
 		return domain.ProblemPack{}, fmt.Errorf("llm generator: read response: %w", err)
 	}
+
+	g.logf("response status=%d body=%s", resp.StatusCode, jsonfmt.FormatForLog(respBody, jsonfmt.DefaultLogLimit))
 
 	if resp.StatusCode >= 400 {
 		return domain.ProblemPack{}, g.wrapHTTPError(resp.StatusCode, respBody)
@@ -132,10 +346,10 @@ func (g *LLMProblemGenerator) Generate(ctx context.Context, req api.GenerateRequ
 	return pack, nil
 }
 
-func (g *LLMProblemGenerator) systemPrompt(category, difficulty string) string {
+func (g *LLMProblemGenerator) systemPrompt(category, difficulty, provider string) string {
 	var providerLine string
-	if g.provider != "" {
-		providerLine = fmt.Sprintf("Provider: %s\\n", g.provider)
+	if provider != "" {
+		providerLine = fmt.Sprintf("Provider: %s\n", provider)
 	}
 
 	return fmt.Sprintf(`You are Improview’s problem generator. Return ONLY JSON matching the schema.
@@ -157,14 +371,14 @@ Rules:
 - Prefer BFS/DFS/Two-Pointers/etc as per category.`, providerLine, category, difficulty)
 }
 
-func (g *LLMProblemGenerator) userPrompt(category, difficulty, customPrompt, providerOverride string) string {
+func (g *LLMProblemGenerator) userPrompt(category, difficulty, customPrompt, providerOverride, defaultProvider string) string {
 	lines := []string{
 		fmt.Sprintf("Generate a fresh problem pack for category \"%s\" at \"%s\" difficulty.", category, difficulty),
 	}
 
 	provider := strings.TrimSpace(providerOverride)
 	if provider == "" {
-		provider = g.provider
+		provider = defaultProvider
 	}
 	if provider != "" {
 		lines = append(lines, fmt.Sprintf("If you must reference a provider, assume %s.", provider))
@@ -190,8 +404,26 @@ func (g *LLMProblemGenerator) wrapHTTPError(status int, body []byte) error {
 	return fmt.Errorf("llm generator: upstream returned %d: %s", status, snippet)
 }
 
+func (g *LLMProblemGenerator) logf(format string, args ...any) {
+	if !llmDebugEnabled() {
+		return
+	}
+	log.Printf("llm generator: "+format, args...)
+}
+
+func llmDebugEnabled() bool {
+	return strings.TrimSpace(os.Getenv("CI_SMOKE_DEBUG")) != ""
+}
+
+type responseJSONSchema struct {
+	Name   string         `json:"name"`
+	Strict bool           `json:"strict"`
+	Schema map[string]any `json:"schema"`
+}
+
 type responseFormat struct {
-	Type string `json:"type"`
+	Type       string              `json:"type"`
+	JSONSchema *responseJSONSchema `json:"json_schema,omitempty"`
 }
 
 type chatMessage struct {

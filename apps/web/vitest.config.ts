@@ -9,6 +9,7 @@ export default defineConfig({
     globals: true,
     setupFiles: './vitest.setup.ts',
     css: true,
+    passWithNoTests: true,
     coverage: {
       reporter: ['text', 'lcov'],
       include: ['src/**/*.{ts,tsx}']

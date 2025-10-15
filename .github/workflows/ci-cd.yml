@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - release-*
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -20,39 +21,48 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v4
+      - name: Set writable Go build cache
+        run: |
+          mkdir -p .cache/go-build
+          echo "GOCACHE=$PWD/.cache/go-build" >> "$GITHUB_ENV"
       - uses: actions/setup-go@v5
         with:
           go-version-file: backend/go.mod
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Install pnpm and CDK CLI
-        run: npm install -g pnpm@9 aws-cdk@2
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9.0.0
+          run_install: false
+      - name: Install CDK CLI
+        run: npm install -g aws-cdk@2
       - name: Install dependencies
-        run: pnpm install --dir infra/cdk
+        run: pnpm install --frozen-lockfile
       - name: Backend tests
         run: go test ./...
         working-directory: backend
       - name: Lint
-        run: pnpm --dir infra/cdk run --if-present lint
+        run: pnpm lint
       - name: Unit tests
-        run: pnpm --dir infra/cdk run --if-present test
+        run: pnpm test
       - name: Build
-        run: pnpm --dir infra/cdk run --if-present build
+        run: pnpm build
+      - name: Verify frontend build output
+        run: test -d apps/web/dist
       - name: Upload build artifact
-        if: success() && github.event_name == 'pull_request'
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: web-dist
-          path: |
-            dist
-            apps/web/dist
-          if-no-files-found: ignore
+          path: apps/web/dist
+          if-no-files-found: error
 
   deploy:
     name: Deploy to AWS
     needs: quality
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release-')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment:
@@ -61,15 +71,22 @@ jobs:
       contents: read
       id-token: write
     env:
-      AWS_REGION: ${{ vars.AWS_REGION }}
-      S3_BUCKET: ${{ vars.AWS_S3_BUCKET }}
-      CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.AWS_CLOUDFRONT_DISTRIBUTION_ID }}
-      FRONTEND_BUILD_DIR: ${{ vars.FRONTEND_BUILD_DIR }}
-      IMPROVIEW_ENV: ${{ vars.IMPROVIEW_ENV }}
-      IMPROVIEW_LIVE_BASE_URL: ${{ vars.IMPROVIEW_LIVE_BASE_URL }}
+      AWS_REGION: ${{ secrets.AWS_REGION != '' && secrets.AWS_REGION || vars.AWS_REGION }}
+      FRONTEND_BUILD_DIR: ${{ secrets.FRONTEND_BUILD_DIR != '' && secrets.FRONTEND_BUILD_DIR || vars.FRONTEND_BUILD_DIR }}
+      IMPROVIEW_ENV: ${{ secrets.IMPROVIEW_ENV != '' && secrets.IMPROVIEW_ENV || vars.IMPROVIEW_ENV }}
+      BASE_URL: ${{ secrets.BASE_URL != '' && secrets.BASE_URL || vars.BASE_URL }}
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID != '' && secrets.GOOGLE_CLIENT_ID || vars.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SCOPES: ${{ secrets.GOOGLE_CLIENT_SCOPES != '' && secrets.GOOGLE_CLIENT_SCOPES || vars.GOOGLE_CLIENT_SCOPES }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      USER_POOL_ID: ${{ secrets.USER_POOL_ID != '' && secrets.USER_POOL_ID || vars.USER_POOL_ID }}
+      USER_POOL_CLIENT_ID: ${{ secrets.USER_POOL_CLIENT_ID != '' && secrets.USER_POOL_CLIENT_ID || vars.USER_POOL_CLIENT_ID }}
+      USER_POOL_CLIENT_IDS: ${{ secrets.USER_POOL_CLIENT_IDS != '' && secrets.USER_POOL_CLIENT_IDS || secrets.COGNITO_APP_CLIENT_IDS != '' && secrets.COGNITO_APP_CLIENT_IDS || vars.USER_POOL_CLIENT_IDS }}
       AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      SMOKE_USER: ${{ 'smoke-tester@improview.dev' }}
+      SMOKE_SECRET_NAME: ${{ (vars.IMPROVIEW_ENV != '' && format('improview/{0}/smoke-credentials', vars.IMPROVIEW_ENV) || 'improview/dev/smoke-credentials') }}
+      SMOKE_SECRET_DESCRIPTION: ${{ 'Cognito smoke-test credentials' }}
     steps:
       - name: Determine deployment eligibility
         id: deployment_guard
@@ -87,15 +104,27 @@ jobs:
         if: steps.deployment_guard.outputs.should_deploy == 'true'
         with:
           node-version: 20
-      - name: Install pnpm and CDK CLI
+      - name: Set up pnpm
         if: steps.deployment_guard.outputs.should_deploy == 'true'
-        run: npm install -g pnpm@9 aws-cdk@2
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9.0.0
+          run_install: false
+      - name: Install CDK CLI
+        if: steps.deployment_guard.outputs.should_deploy == 'true'
+        run: npm install -g aws-cdk@2
       - name: Install dependencies
         if: steps.deployment_guard.outputs.should_deploy == 'true'
         run: pnpm install --dir infra/cdk
       - name: Build application
         if: steps.deployment_guard.outputs.should_deploy == 'true'
         run: pnpm --dir infra/cdk run build
+      - name: Download frontend build artifact
+        if: steps.deployment_guard.outputs.should_deploy == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: .
       - name: Configure AWS credentials via OIDC
         if: steps.deployment_guard.outputs.should_deploy == 'true' && env.AWS_ROLE_TO_ASSUME != ''
         uses: aws-actions/configure-aws-credentials@v4
@@ -122,15 +151,160 @@ jobs:
         run: aws cloudfront create-invalidation --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" --paths "/*"
       - name: Deploy serverless services
         if: steps.deployment_guard.outputs.should_deploy == 'true'
-        run: pnpm --dir infra/cdk run deploy:services
+        run: pnpm --dir infra/cdk run deploy:services -- --env "${IMPROVIEW_ENV:-dev}"
+      - name: Update provider secrets
+        if: steps.deployment_guard.outputs.should_deploy == 'true'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GROK_API_KEY: ${{ secrets.GROK_API_KEY }}
+        run: |
+          set -euo pipefail
+          secret_name="improview/${IMPROVIEW_ENV:-dev}/providers"
+          if [ -z "${OPENAI_API_KEY:-}" ] && [ -z "${GROK_API_KEY:-}" ]; then
+            echo "No provider API keys provided; skipping secret update."
+            exit 0
+          fi
+          if ! aws secretsmanager describe-secret --secret-id "${secret_name}" > /dev/null 2>&1; then
+            echo "Secrets Manager entry ${secret_name} not found; skipping upsert."
+            exit 0
+          fi
+          payload="$(python3 -c 'import json, os; data = {}; openai = os.environ.get("OPENAI_API_KEY", "").strip(); grok = os.environ.get("GROK_API_KEY", "").strip(); data.update({k: v for k, v in [("openaiApiKey", openai), ("grokApiKey", grok)] if v}); print(json.dumps(data))')"
+          if [ "${payload}" = "{}" ]; then
+            echo "No provider API keys provided; skipping secret update."
+            exit 0
+          fi
+          aws secretsmanager put-secret-value --secret-id "${secret_name}" --secret-string "${payload}"
+          echo "Updated provider secret ${secret_name}."
+      - name: Resolve Cognito identifiers
+        if: steps.deployment_guard.outputs.should_deploy == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          env_name="${IMPROVIEW_ENV:-dev}"
+          region="${AWS_REGION:-us-east-1}"
+          auth_stack="Improview-${env_name}-Auth"
+          echo "Resolving Cognito outputs from ${auth_stack} in ${region}..."
+          user_pool_id="$(aws cloudformation describe-stacks \
+            --region "${region}" \
+            --stack-name "${auth_stack}" \
+            --query "Stacks[0].Outputs[?OutputKey=='UserPoolId'].OutputValue" \
+            --output text)"
+          client_id="$(aws cloudformation describe-stacks \
+            --region "${region}" \
+            --stack-name "${auth_stack}" \
+            --query "Stacks[0].Outputs[?OutputKey=='UserPoolClientId'].OutputValue" \
+            --output text)"
+          if [ -z "${user_pool_id}" ] || [ "${user_pool_id}" = "None" ]; then
+            echo "UserPoolId output missing for ${auth_stack}." >&2
+            exit 1
+          fi
+          if [ -z "${client_id}" ] || [ "${client_id}" = "None" ]; then
+            echo "UserPoolClientId output missing for ${auth_stack}." >&2
+            exit 1
+          fi
+          echo "Resolved Cognito User Pool: ${user_pool_id}"
+          echo "Resolved Cognito Client: ${client_id}"
+          {
+            echo "USER_POOL_ID=${user_pool_id}"
+            echo "USER_POOL_CLIENT_ID=${client_id}"
+            echo "USER_POOL_CLIENT_IDS=${client_id}"
+            echo "COGNITO_USER_POOL_ID=${user_pool_id}"
+            echo "COGNITO_APP_CLIENT_IDS=${client_id}"
+          } >> "${GITHUB_ENV}"
+      - name: Resolve frontend outputs
+        if: steps.deployment_guard.outputs.should_deploy == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          env_name="${IMPROVIEW_ENV:-dev}"
+          region="${AWS_REGION:-us-east-1}"
+          frontend_stack="Improview-${env_name}-Frontend"
+          echo "Resolving frontend outputs from ${frontend_stack} in ${region}..."
+          bucket="$(aws cloudformation describe-stacks \
+            --region "${region}" \
+            --stack-name "${frontend_stack}" \
+            --query "Stacks[0].Outputs[?OutputKey=='SiteBucketName'].OutputValue" \
+            --output text)"
+          distribution_id="$(aws cloudformation describe-stacks \
+            --region "${region}" \
+            --stack-name "${frontend_stack}" \
+            --query "Stacks[0].Outputs[?OutputKey=='DistributionId'].OutputValue" \
+            --output text)"
+          distribution_domain="$(aws cloudformation describe-stacks \
+            --region "${region}" \
+            --stack-name "${frontend_stack}" \
+            --query "Stacks[0].Outputs[?OutputKey=='DistributionDomain'].OutputValue" \
+            --output text)"
+          if [ -z "${bucket}" ] || [ "${bucket}" = "None" ]; then
+            echo "SiteBucketName output missing for ${frontend_stack}." >&2
+            exit 1
+          fi
+          if [ -z "${distribution_id}" ] || [ "${distribution_id}" = "None" ]; then
+            echo "DistributionId output missing for ${frontend_stack}." >&2
+            exit 1
+          fi
+          echo "Resolved frontend bucket: ${bucket}"
+          echo "Resolved CloudFront distribution: ${distribution_id}"
+          {
+            echo "S3_BUCKET=${bucket}"
+            echo "CLOUDFRONT_DISTRIBUTION_ID=${distribution_id}"
+            echo "CLOUDFRONT_DOMAIN=${distribution_domain}"
+          } >> "${GITHUB_ENV}"
+      - name: Ensure smoke-test Cognito user
+        if: steps.deployment_guard.outputs.should_deploy == 'true'
+        env:
+          NO_COLOR: '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${USER_POOL_ID:-}" = "" ]; then
+            echo "Smoke user setup failed; USER_POOL_ID is required." >&2
+            exit 1
+          fi
+          args=(--env "${IMPROVIEW_ENV:-dev}" --user "${SMOKE_USER}" --user-pool-id "${USER_POOL_ID}")
+          if [ -n "${AWS_REGION:-}" ]; then
+            args+=(--region "${AWS_REGION}")
+          fi
+          if [ -n "${SMOKE_PASSWORD:-}" ]; then
+            args+=(--password "${SMOKE_PASSWORD}")
+          fi
+          args+=(--secret-name "${SMOKE_SECRET_NAME}")
+          args+=(--description "${SMOKE_SECRET_DESCRIPTION}")
+          ./backend/scripts/setup-smoke-user.sh "${args[@]}"
+      - name: Resolve API endpoint
+        id: resolve_api_endpoint
+        if: steps.deployment_guard.outputs.should_deploy == 'true'
+        run: |
+          env_name="${IMPROVIEW_ENV:-dev}"
+          region="${AWS_REGION:-us-east-1}"
+          stack_name="Improview-${env_name}-Backend"
+          echo "Resolving ApiEndpoint from ${stack_name} in ${region}..."
+          endpoint=$(aws cloudformation describe-stacks \
+            --region "${region}" \
+            --stack-name "${stack_name}" \
+            --query 'Stacks[0].Outputs[?OutputKey==`ApiEndpoint`].OutputValue' \
+            --output text)
+          if [ -z "${endpoint}" ] || [ "${endpoint}" = "None" ]; then
+            echo "Failed to resolve ApiEndpoint output for ${stack_name}." >&2
+            exit 1
+          fi
+          echo "Resolved ApiEndpoint: ${endpoint}"
+          echo "BASE_URL=${endpoint}" >> "${GITHUB_ENV}"
+          echo "base_url=${endpoint}" >> "${GITHUB_OUTPUT}"
+      - name: Set writable Go build cache
+        if: steps.deployment_guard.outputs.should_deploy == 'true' && steps.resolve_api_endpoint.outputs.base_url != ''
+        run: |
+          mkdir -p .cache/go-build
+          echo "GOCACHE=$PWD/.cache/go-build" >> "$GITHUB_ENV"
       - uses: actions/setup-go@v5
-        if: steps.deployment_guard.outputs.should_deploy == 'true' && env.IMPROVIEW_LIVE_BASE_URL != ''
+        if: steps.deployment_guard.outputs.should_deploy == 'true' && steps.resolve_api_endpoint.outputs.base_url != ''
         with:
           go-version-file: backend/go.mod
       - name: Run live API smoke tests
-        if: steps.deployment_guard.outputs.should_deploy == 'true' && env.IMPROVIEW_LIVE_BASE_URL != ''
-        run: go test ./internal/api -run Live -v
-        working-directory: backend
+        if: steps.deployment_guard.outputs.should_deploy == 'true' && steps.resolve_api_endpoint.outputs.base_url != ''
+        env:
+          NO_COLOR: '1'
+        run: ./backend/scripts/run-smoke.sh --env "${IMPROVIEW_ENV:-dev}" --run Live
       - name: Skip deployment (missing AWS credentials)
         if: steps.deployment_guard.outputs.should_deploy != 'true'
         run: echo "AWS credentials not configured; skipping deploy."
@@ -147,15 +321,22 @@ jobs:
       contents: read
       id-token: write
     env:
-      AWS_REGION: ${{ vars.AWS_REGION }}
-      S3_BUCKET: ${{ vars.AWS_S3_BUCKET }}
-      CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.AWS_CLOUDFRONT_DISTRIBUTION_ID }}
-      FRONTEND_BUILD_DIR: ${{ vars.FRONTEND_BUILD_DIR }}
-      IMPROVIEW_ENV: ${{ vars.IMPROVIEW_ENV }}
-      IMPROVIEW_LIVE_BASE_URL: ${{ vars.IMPROVIEW_LIVE_BASE_URL }}
+      AWS_REGION: ${{ secrets.AWS_REGION != '' && secrets.AWS_REGION || vars.AWS_REGION }}
+      FRONTEND_BUILD_DIR: ${{ secrets.FRONTEND_BUILD_DIR != '' && secrets.FRONTEND_BUILD_DIR || vars.FRONTEND_BUILD_DIR }}
+      IMPROVIEW_ENV: ${{ secrets.IMPROVIEW_ENV != '' && secrets.IMPROVIEW_ENV || vars.IMPROVIEW_ENV }}
+      BASE_URL: ${{ secrets.BASE_URL != '' && secrets.BASE_URL || vars.BASE_URL }}
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID != '' && secrets.GOOGLE_CLIENT_ID || vars.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SCOPES: ${{ secrets.GOOGLE_CLIENT_SCOPES != '' && secrets.GOOGLE_CLIENT_SCOPES || vars.GOOGLE_CLIENT_SCOPES }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      USER_POOL_ID: ${{ secrets.USER_POOL_ID != '' && secrets.USER_POOL_ID || vars.USER_POOL_ID }}
+      USER_POOL_CLIENT_ID: ${{ secrets.USER_POOL_CLIENT_ID != '' && secrets.USER_POOL_CLIENT_ID || vars.USER_POOL_CLIENT_ID }}
+      USER_POOL_CLIENT_IDS: ${{ secrets.USER_POOL_CLIENT_IDS != '' && secrets.USER_POOL_CLIENT_IDS || secrets.COGNITO_APP_CLIENT_IDS != '' && secrets.COGNITO_APP_CLIENT_IDS || vars.USER_POOL_CLIENT_IDS }}
       AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      SMOKE_USER: ${{ secrets.SMOKE_USER != '' && secrets.SMOKE_USER || vars.SMOKE_USER != '' && vars.SMOKE_USER || 'smoke-tester@improview.dev' }}
+      SMOKE_SECRET_NAME: ${{ vars.SMOKE_SECRET_NAME != '' && vars.SMOKE_SECRET_NAME || (vars.IMPROVIEW_ENV != '' && format('improview/{0}/smoke-credentials', vars.IMPROVIEW_ENV) || 'improview/dev/smoke-credentials') }}
+      SMOKE_SECRET_DESCRIPTION: ${{ vars.SMOKE_SECRET_DESCRIPTION != '' && vars.SMOKE_SECRET_DESCRIPTION || 'Cognito smoke-test credentials' }}
     steps:
       - name: Determine deployment eligibility
         id: dev_deployment_guard
@@ -173,15 +354,27 @@ jobs:
         if: steps.dev_deployment_guard.outputs.should_deploy == 'true'
         with:
           node-version: 20
-      - name: Install pnpm and CDK CLI
+      - name: Set up pnpm
         if: steps.dev_deployment_guard.outputs.should_deploy == 'true'
-        run: npm install -g pnpm@9 aws-cdk@2
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9.0.0
+          run_install: false
+      - name: Install CDK CLI
+        if: steps.dev_deployment_guard.outputs.should_deploy == 'true'
+        run: npm install -g aws-cdk@2
       - name: Install dependencies
         if: steps.dev_deployment_guard.outputs.should_deploy == 'true'
         run: pnpm install --dir infra/cdk
       - name: Build application
         if: steps.dev_deployment_guard.outputs.should_deploy == 'true'
         run: pnpm --dir infra/cdk run build
+      - name: Download frontend build artifact
+        if: steps.dev_deployment_guard.outputs.should_deploy == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: .
       - name: Configure AWS credentials via OIDC
         if: steps.dev_deployment_guard.outputs.should_deploy == 'true' && env.AWS_ROLE_TO_ASSUME != ''
         uses: aws-actions/configure-aws-credentials@v4
@@ -208,18 +401,160 @@ jobs:
         run: aws cloudfront create-invalidation --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" --paths "/*"
       - name: Deploy serverless services
         if: steps.dev_deployment_guard.outputs.should_deploy == 'true'
-        run: pnpm --dir infra/cdk run deploy:services
+        run: pnpm --dir infra/cdk run deploy:services -- --env "${IMPROVIEW_ENV:-dev}"
+      - name: Update provider secrets
+        if: steps.dev_deployment_guard.outputs.should_deploy == 'true'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GROK_API_KEY: ${{ secrets.GROK_API_KEY }}
+        run: |
+          set -euo pipefail
+          secret_name="improview/${IMPROVIEW_ENV:-dev}/providers"
+          if [ -z "${OPENAI_API_KEY:-}" ] && [ -z "${GROK_API_KEY:-}" ]; then
+            echo "No provider API keys provided; skipping secret update."
+            exit 0
+          fi
+          if ! aws secretsmanager describe-secret --secret-id "${secret_name}" > /dev/null 2>&1; then
+            echo "Secrets Manager entry ${secret_name} not found; skipping upsert."
+            exit 0
+          fi
+          payload="$(python3 -c 'import json, os; data = {}; openai = os.environ.get("OPENAI_API_KEY", "").strip(); grok = os.environ.get("GROK_API_KEY", "").strip(); data.update({k: v for k, v in [("openaiApiKey", openai), ("grokApiKey", grok)] if v}); print(json.dumps(data))')"
+          if [ "${payload}" = "{}" ]; then
+            echo "No provider API keys provided; skipping secret update."
+            exit 0
+          fi
+          aws secretsmanager put-secret-value --secret-id "${secret_name}" --secret-string "${payload}"
+          echo "Updated provider secret ${secret_name}."
+      - name: Resolve Cognito identifiers
+        if: steps.dev_deployment_guard.outputs.should_deploy == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          env_name="${IMPROVIEW_ENV:-dev}"
+          region="${AWS_REGION:-us-east-1}"
+          auth_stack="Improview-${env_name}-Auth"
+          echo "Resolving Cognito outputs from ${auth_stack} in ${region}..."
+          user_pool_id="$(aws cloudformation describe-stacks \
+            --region "${region}" \
+            --stack-name "${auth_stack}" \
+            --query "Stacks[0].Outputs[?OutputKey=='UserPoolId'].OutputValue" \
+            --output text)"
+          client_id="$(aws cloudformation describe-stacks \
+            --region "${region}" \
+            --stack-name "${auth_stack}" \
+            --query "Stacks[0].Outputs[?OutputKey=='UserPoolClientId'].OutputValue" \
+            --output text)"
+          if [ -z "${user_pool_id}" ] || [ "${user_pool_id}" = "None" ]; then
+            echo "UserPoolId output missing for ${auth_stack}." >&2
+            exit 1
+          fi
+          if [ -z "${client_id}" ] || [ "${client_id}" = "None" ]; then
+            echo "UserPoolClientId output missing for ${auth_stack}." >&2
+            exit 1
+          fi
+          echo "Resolved Cognito User Pool: ${user_pool_id}"
+          echo "Resolved Cognito Client: ${client_id}"
+          {
+            echo "USER_POOL_ID=${user_pool_id}"
+            echo "USER_POOL_CLIENT_ID=${client_id}"
+            echo "USER_POOL_CLIENT_IDS=${client_id}"
+            echo "COGNITO_USER_POOL_ID=${user_pool_id}"
+            echo "COGNITO_APP_CLIENT_IDS=${client_id}"
+          } >> "${GITHUB_ENV}"
+      - name: Resolve frontend outputs
+        if: steps.dev_deployment_guard.outputs.should_deploy == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          env_name="${IMPROVIEW_ENV:-dev}"
+          region="${AWS_REGION:-us-east-1}"
+          frontend_stack="Improview-${env_name}-Frontend"
+          echo "Resolving frontend outputs from ${frontend_stack} in ${region}..."
+          bucket="$(aws cloudformation describe-stacks \
+            --region "${region}" \
+            --stack-name "${frontend_stack}" \
+            --query "Stacks[0].Outputs[?OutputKey=='SiteBucketName'].OutputValue" \
+            --output text)"
+          distribution_id="$(aws cloudformation describe-stacks \
+            --region "${region}" \
+            --stack-name "${frontend_stack}" \
+            --query "Stacks[0].Outputs[?OutputKey=='DistributionId'].OutputValue" \
+            --output text)"
+          distribution_domain="$(aws cloudformation describe-stacks \
+            --region "${region}" \
+            --stack-name "${frontend_stack}" \
+            --query "Stacks[0].Outputs[?OutputKey=='DistributionDomain'].OutputValue" \
+            --output text)"
+          if [ -z "${bucket}" ] || [ "${bucket}" = "None" ]; then
+            echo "SiteBucketName output missing for ${frontend_stack}." >&2
+            exit 1
+          fi
+          if [ -z "${distribution_id}" ] || [ "${distribution_id}" = "None" ]; then
+            echo "DistributionId output missing for ${frontend_stack}." >&2
+            exit 1
+          fi
+          echo "Resolved frontend bucket: ${bucket}"
+          echo "Resolved CloudFront distribution: ${distribution_id}"
+          {
+            echo "S3_BUCKET=${bucket}"
+            echo "CLOUDFRONT_DISTRIBUTION_ID=${distribution_id}"
+            echo "CLOUDFRONT_DOMAIN=${distribution_domain}"
+          } >> "${GITHUB_ENV}"
+      - name: Ensure smoke-test Cognito user
+        if: steps.dev_deployment_guard.outputs.should_deploy == 'true'
+        env:
+          NO_COLOR: '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${USER_POOL_ID:-}" = "" ]; then
+            echo "Smoke user setup failed; USER_POOL_ID is required." >&2
+            exit 1
+          fi
+          args=(--env "${IMPROVIEW_ENV:-dev}" --user "${SMOKE_USER}" --user-pool-id "${USER_POOL_ID}")
+          if [ -n "${AWS_REGION:-}" ]; then
+            args+=(--region "${AWS_REGION}")
+          fi
+          if [ -n "${SMOKE_PASSWORD:-}" ]; then
+            args+=(--password "${SMOKE_PASSWORD}")
+          fi
+          args+=(--secret-name "${SMOKE_SECRET_NAME}")
+          args+=(--description "${SMOKE_SECRET_DESCRIPTION}")
+          ./backend/scripts/setup-smoke-user.sh "${args[@]}"
+      - name: Resolve API endpoint
+        id: resolve_api_endpoint
+        if: steps.dev_deployment_guard.outputs.should_deploy == 'true'
+        run: |
+          env_name="${IMPROVIEW_ENV:-dev}"
+          region="${AWS_REGION:-us-east-1}"
+          stack_name="Improview-${env_name}-Backend"
+          echo "Resolving ApiEndpoint from ${stack_name} in ${region}..."
+          endpoint=$(aws cloudformation describe-stacks \
+            --region "${region}" \
+            --stack-name "${stack_name}" \
+            --query 'Stacks[0].Outputs[?OutputKey==`ApiEndpoint`].OutputValue' \
+            --output text)
+          if [ -z "${endpoint}" ] || [ "${endpoint}" = "None" ]; then
+            echo "Failed to resolve ApiEndpoint output for ${stack_name}." >&2
+            exit 1
+          fi
+          echo "Resolved ApiEndpoint: ${endpoint}"
+          echo "BASE_URL=${endpoint}" >> "${GITHUB_ENV}"
+          echo "base_url=${endpoint}" >> "${GITHUB_OUTPUT}"
+      - name: Set writable Go build cache
+        if: steps.dev_deployment_guard.outputs.should_deploy == 'true' && steps.resolve_api_endpoint.outputs.base_url != ''
+        run: |
+          mkdir -p .cache/go-build
+          echo "GOCACHE=$PWD/.cache/go-build" >> "$GITHUB_ENV"
       - uses: actions/setup-go@v5
-        if: steps.dev_deployment_guard.outputs.should_deploy == 'true' && (env.IMPROVIEW_LIVE_BASE_URL != '' || env.BASE_URL != '')
+        if: steps.dev_deployment_guard.outputs.should_deploy == 'true' && steps.resolve_api_endpoint.outputs.base_url != ''
         with:
           go-version-file: backend/go.mod
       - name: Run live API smoke tests
-        if: steps.dev_deployment_guard.outputs.should_deploy == 'true' && (env.IMPROVIEW_LIVE_BASE_URL != '' || env.BASE_URL != '')
+        if: steps.dev_deployment_guard.outputs.should_deploy == 'true' && steps.resolve_api_endpoint.outputs.base_url != ''
         env:
-          BASE_URL: ${{ env.IMPROVIEW_LIVE_BASE_URL != '' && env.IMPROVIEW_LIVE_BASE_URL || env.BASE_URL }}
-          IMPROVIEW_LIVE_BASE_URL: ${{ env.IMPROVIEW_LIVE_BASE_URL != '' && env.IMPROVIEW_LIVE_BASE_URL || env.BASE_URL }}
-        run: go test ./internal/api -run Live -v
-        working-directory: backend
+          NO_COLOR: '1'
+        run: ./backend/scripts/run-smoke.sh --env "${IMPROVIEW_ENV:-dev}" --run Live
       - name: Skip deployment (missing AWS credentials)
         if: steps.dev_deployment_guard.outputs.should_deploy != 'true'
         run: echo "AWS credentials not configured; skipping deploy."

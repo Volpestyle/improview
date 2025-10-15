@@ -8,6 +8,9 @@ export interface AuthStackProps extends StackProps {
   domainPrefix?: string;
   webCallbackUrls?: string[];
   webLogoutUrls?: string[];
+  googleClientId?: string;
+  googleClientSecret?: string;
+  googleScopes?: string[];
 }
 
 export class AuthStack extends Stack {
@@ -38,7 +41,7 @@ export class AuthStack extends Stack {
       standardAttributes: {
         email: {
           required: true,
-          mutable: false,
+          mutable: true,
         },
       },
       passwordPolicy: {
@@ -54,6 +57,29 @@ export class AuthStack extends Stack {
       removalPolicy: RemovalPolicy.DESTROY,
     });
 
+    const supportedProviders: cognito.UserPoolClientIdentityProvider[] = [
+      cognito.UserPoolClientIdentityProvider.COGNITO,
+    ];
+
+    let googleProvider: cognito.UserPoolIdentityProviderGoogle | undefined;
+    const googleClientId = props.googleClientId?.trim();
+    const googleClientSecret = props.googleClientSecret?.trim();
+
+    if (googleClientId && googleClientSecret) {
+      googleProvider = new cognito.UserPoolIdentityProviderGoogle(this, 'GoogleProvider', {
+        userPool: this.userPool,
+        clientId: googleClientId,
+        clientSecret: googleClientSecret,
+        scopes: props.googleScopes ?? ['openid', 'email', 'profile'],
+        attributeMapping: {
+          email: cognito.ProviderAttribute.GOOGLE_EMAIL,
+          givenName: cognito.ProviderAttribute.GOOGLE_GIVEN_NAME,
+          familyName: cognito.ProviderAttribute.GOOGLE_FAMILY_NAME,
+        },
+      });
+      supportedProviders.push(cognito.UserPoolClientIdentityProvider.GOOGLE);
+    }
+
     this.userPoolClient = this.userPool.addClient('WebClient', {
       userPoolClientName: `improview-${envName}-web`,
       generateSecret: false,
@@ -67,14 +93,20 @@ export class AuthStack extends Stack {
         flows: {
           authorizationCodeGrant: true,
         },
-        scopes: [cognito.OAuthScope.OPENID, cognito.OAuthScope.EMAIL, cognito.OAuthScope.PROFILE],
+        scopes: [
+          cognito.OAuthScope.OPENID,
+          cognito.OAuthScope.EMAIL,
+          cognito.OAuthScope.PROFILE,
+        ],
         callbackUrls: defaultCallbackUrls,
         logoutUrls: defaultLogoutUrls,
       },
-      supportedIdentityProviders: [
-        cognito.UserPoolClientIdentityProvider.COGNITO,
-      ],
+      supportedIdentityProviders: supportedProviders,
     });
+
+    if (googleProvider) {
+      this.userPoolClient.node.addDependency(googleProvider);
+    }
 
     if (props.domainPrefix) {
       const sanitizedPrefix = props.domainPrefix

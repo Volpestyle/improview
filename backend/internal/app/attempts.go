@@ -31,12 +31,26 @@ func NewMemoryAttemptStore(clock api.Clock) *MemoryAttemptStore {
 }
 
 // Create records a new attempt when a user begins solving.
-func (s *MemoryAttemptStore) Create(_ context.Context, req api.CreateAttemptRequest) (domain.Attempt, error) {
+func (s *MemoryAttemptStore) Create(ctx context.Context, req api.CreateAttemptRequest) (domain.Attempt, error) {
 	if s == nil {
 		return domain.Attempt{}, api.ErrNotImplemented
 	}
 	if strings.TrimSpace(req.ProblemID) == "" {
 		return domain.Attempt{}, api.ErrBadRequest
+	}
+
+	var userID string
+	if ctx != nil {
+		if identity, ok := api.IdentityFromContext(ctx); ok {
+			switch {
+			case strings.TrimSpace(identity.Subject) != "":
+				userID = strings.TrimSpace(identity.Subject)
+			case strings.TrimSpace(identity.Username) != "":
+				userID = strings.TrimSpace(identity.Username)
+			case strings.TrimSpace(identity.Email) != "":
+				userID = strings.TrimSpace(identity.Email)
+			}
+		}
 	}
 
 	s.mu.Lock()
@@ -47,13 +61,13 @@ func (s *MemoryAttemptStore) Create(_ context.Context, req api.CreateAttemptRequ
 	attempt := domain.Attempt{
 		ID:        id,
 		ProblemID: req.ProblemID,
-		UserID:    req.UserID,
+		UserID:    userID,
 		Language:  req.Language,
 		StartedAt: now,
 	}
 
 	s.attempts[id] = attempt
-	s.runs[id] = nil
+	s.runs[id] = make([]domain.RunResult, 0)
 	return attempt, nil
 }
 
@@ -128,6 +142,9 @@ func (s *MemoryAttemptStore) Get(_ context.Context, attemptID string) (domain.At
 	}
 
 	runs := append([]domain.RunResult(nil), s.runs[attemptID]...)
+	if runs == nil {
+		runs = make([]domain.RunResult, 0)
+	}
 	return attempt, runs, nil
 }
 
