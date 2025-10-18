@@ -17,8 +17,12 @@ import {
     RunTestsResponseSchema,
     SubmitResponseSchema,
     AttemptWithRunsSchema,
+    SavedProblemSummary,
+    SavedProblemSummarySchema,
+    SavedAttemptSnapshot,
+    SavedAttemptSnapshotSchema,
 } from '../types/api';
-import { ProblemPack, ProblemPackSchema } from '../types/problem';
+import { ProblemPack, ProblemPackSchema, RunResult } from '../types/problem';
 
 /**
  * REST client for the Improview API
@@ -92,16 +96,33 @@ export class RestClient {
     /**
      * Get test runs for an attempt (for database sync)
      */
-    public async getTestRuns(attemptId: string): Promise<{ runs: any[] }> {
-        return this.apiService.get<{ runs: any[] }>(`/api/test-runs/${attemptId}`);
+    public async getTestRuns(attemptId: string): Promise<{ runs: RunResult[] }> {
+        return this.apiService.get<{ runs: RunResult[] }>(`/api/test-runs/${attemptId}`);
     }
 
     /**
      * Get saved problems for the authenticated user
      */
-    public async getSavedProblems(params?: { status?: string; limit?: number }): Promise<{ saved_problems: any[] }> {
-        const queryParams = params ? `?${new URLSearchParams(params as any)}` : '';
-        return this.apiService.get<{ saved_problems: any[] }>(`/api/user/saved-problems${queryParams}`);
+    public async getSavedProblems(params?: { status?: string; limit?: number }): Promise<{
+        saved_problems: SavedProblemSummary[];
+        next_token?: string | null;
+    }> {
+        const searchParams = new URLSearchParams();
+        if (params?.status) {
+            searchParams.set('status', params.status);
+        }
+        if (params?.limit !== undefined) {
+            searchParams.set('limit', params.limit.toString());
+        }
+        const queryString = searchParams.toString();
+        const queryParams = queryString ? `?${queryString}` : '';
+        const response = await this.apiService.get<{ saved_problems: unknown[]; next_token?: string | null }>(
+            `/api/user/saved-problems${queryParams}`,
+        );
+        return {
+            saved_problems: SavedProblemSummarySchema.array().parse(response.saved_problems),
+            next_token: response.next_token,
+        };
     }
 
     /**
@@ -115,8 +136,13 @@ export class RestClient {
     /**
      * Get attempts for a saved problem
      */
-    public async getSavedProblemAttempts(savedProblemId: string): Promise<{ attempts: any[] }> {
-        return this.apiService.get<{ attempts: any[] }>(`/api/user/saved-problems/${savedProblemId}/attempts`);
+    public async getSavedProblemAttempts(savedProblemId: string): Promise<{ attempts: SavedAttemptSnapshot[] }> {
+        const response = await this.apiService.get<{ attempts: unknown[] }>(
+            `/api/user/saved-problems/${savedProblemId}/attempts`,
+        );
+        return {
+            attempts: SavedAttemptSnapshotSchema.array().parse(response.attempts),
+        };
     }
 
     /**
@@ -130,7 +156,13 @@ export class RestClient {
         fail_count: number;
         runtime_ms: number;
         submitted_at?: number;
-    }): Promise<{ attempt: any }> {
-        return this.apiService.post<{ attempt: any }>(`/api/user/saved-problems/${savedProblemId}/attempts`, attemptData);
+    }): Promise<{ attempt: SavedAttemptSnapshot }> {
+        const response = await this.apiService.post<{ attempt: unknown }>(
+            `/api/user/saved-problems/${savedProblemId}/attempts`,
+            attemptData,
+        );
+        return {
+            attempt: SavedAttemptSnapshotSchema.parse(response.attempt),
+        };
     }
 }

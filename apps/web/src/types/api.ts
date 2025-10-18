@@ -52,7 +52,7 @@ export const CreateAttemptResponseSchema = z.object({
     attempt: AttemptSchema,
 });
 
-const SavedAttemptSnapshotSchema = z.object({
+export const SavedAttemptSnapshotSchema = z.object({
     attempt_id: z.string(),
     status: z.string(),
     updated_at: z.number(),
@@ -133,3 +133,4 @@ export type SubmitResponse = z.infer<typeof SubmitResponseSchema>;
 export type AttemptWithRuns = z.infer<typeof AttemptWithRunsSchema>;
 export type CreateSavedProblemResponse = z.infer<typeof CreateSavedProblemResponseSchema>;
 export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
+export type SavedAttemptSnapshot = z.infer<typeof SavedAttemptSnapshotSchema>;
