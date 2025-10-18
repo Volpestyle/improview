@@ -1,20 +1,36 @@
-import clsx from 'clsx';
+import { cva, type VariantProps } from 'class-variance-authority';
+import { forwardRef, type HTMLAttributes } from 'react';
+import { cn } from '../../utils/cn';
 
-export interface SkeletonProps extends React.HTMLAttributes<HTMLDivElement> {
-  radius?: 'sm' | 'md' | 'lg' | 'full';
-}
+const skeletonVariants = cva('animate-pulse bg-bg-subtle', {
+  variants: {
+    radius: {
+      none: 'rounded-none',
+      sm: 'rounded-sm',
+      md: 'rounded-md',
+      lg: 'rounded-lg',
+      xl: 'rounded-xl',
+      full: 'rounded-full',
+    },
+  },
+  defaultVariants: {
+    radius: 'md',
+  },
+});
 
-const RADIUS_MAP: Record<NonNullable<SkeletonProps['radius']>, string> = {
-  sm: 'rounded-sm',
-  md: 'rounded-md',
-  lg: 'rounded-lg',
-  full: 'rounded-full',
-};
+export interface SkeletonProps
+  extends HTMLAttributes<HTMLDivElement>,
+    VariantProps<typeof skeletonVariants> {}
 
-export const Skeleton = ({ className, radius = 'md', ...rest }: SkeletonProps) => (
-  <div
-    aria-hidden="true"
-    {...rest}
-    className={clsx('animate-pulse bg-bg-sunken', RADIUS_MAP[radius], className)}
-  />
+export const Skeleton = forwardRef<HTMLDivElement, SkeletonProps>(
+  ({ className, radius, ...rest }, ref) => (
+    <div
+      ref={ref}
+      aria-hidden="true"
+      className={cn(skeletonVariants({ radius }), className)}
+      {...rest}
+    />
+  ),
 );
+
+Skeleton.displayName = 'Skeleton';

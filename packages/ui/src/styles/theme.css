@@ -1,0 +1,109 @@
+@import './fonts.css';
+
+:root {
+  font-family: var(
+    --font-family-sans,
+    Geist,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif
+  );
+  font-size: var(--font-size-root, 14px);
+  line-height: 1.5;
+  color: var(--color-fg-default, #1c1c1c);
+  background-color: var(--color-bg-default, #fbf1c7);
+  min-height: 100%;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings:
+    'rlig' 1,
+    'calt' 1;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100%;
+  font-family: var(--font-family-sans, Geist, system-ui, sans-serif);
+  font-size: var(--font-size-base, 14px);
+  line-height: inherit;
+  color: var(--color-fg-default, #1c1c1c);
+  background-color: var(--color-bg-default, #fbf1c7);
+  font-feature-settings:
+    'rlig' 1,
+    'calt' 1;
+  transition:
+    background-color var(--motion-duration-base, 180ms)
+      var(--motion-easing-inOut, cubic-bezier(0.4, 0, 0.2, 1)),
+    color var(--motion-duration-base, 180ms)
+      var(--motion-easing-inOut, cubic-bezier(0.4, 0, 0.2, 1));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+}
+
+code,
+pre,
+tt,
+kbd {
+  font-family: var(
+    --font-family-mono,
+    'Geist Mono',
+    'CursorMono',
+    'JetBrains Mono',
+    'Fira Code',
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    'Liberation Mono',
+    'Courier New',
+    monospace
+  );
+}
+
+::selection {
+  background-color: var(--editor-selection, rgba(131, 165, 152, 0.32));
+  color: var(--color-fg-inverse, #fbf1c7);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-border-focus, #83a598);
+  outline-offset: 2px;
+}
+
+[data-theme='dark'] body {
+  background-color: var(--color-bg-default, #1c1c1c);
+  color: var(--color-fg-default, #ebdbb2);
+}

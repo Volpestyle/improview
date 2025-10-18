@@ -1,329 +1,306 @@
-type AuthConfig = {
-  domain: string;
-  clientId: string;
-  redirectUri: string;
-  logoutUri: string;
-  clientSecret?: string;
-  scope?: string;
-  identityProviders?: string;
-};
+import { User, UserSchema } from '../types/user';
 
-export type AuthTokenResponse = {
-  accessToken: string;
-  idToken?: string;
-  refreshToken?: string;
-  expiresIn?: number;
-  tokenType?: string;
-};
+/**
+ * PKCE helper functions for OAuth 2.0 with PKCE
+ */
 
-export class AuthError extends Error {
-  constructor(
-    message: string,
-    public readonly status: number,
-    public readonly payload?: unknown,
-  ) {
-    super(message);
-    this.name = 'AuthError';
-  }
+/**
+ * Generate a cryptographically secure random string for PKCE code verifier
+ */
+export function createCodeVerifier(): string {
+    const array = new Uint8Array(32);
+    crypto.getRandomValues(array);
+    return base64URLEncode(array);
 }
 
-const DEFAULT_SCOPE = 'openid profile email';
-const DEFAULT_IDENTITY_PROVIDERS = (import.meta.env.VITE_AUTH_IDENTITY_PROVIDERS as string | undefined)?.trim();
+/**
+ * Create a code challenge from a code verifier using SHA-256
+ */
+export async function createCodeChallenge(verifier: string): Promise<string> {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(verifier);
+    const hash = await crypto.subtle.digest('SHA-256', data);
+    return base64URLEncode(new Uint8Array(hash));
+}
 
-const normalizeDomain = (domain: string) => {
-  const trimmed = domain.trim();
-  if (!trimmed) {
-    return trimmed;
-  }
-  const withoutProtocol = trimmed.replace(/^https?:\/\//i, '');
-  return withoutProtocol.endsWith('/') ? withoutProtocol.slice(0, -1) : withoutProtocol;
-};
+/**
+ * Base64URL encode (RFC 4648 Section 5)
+ */
+function base64URLEncode(array: Uint8Array): string {
+    const base64 = btoa(String.fromCharCode(...array));
+    return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
 
-const getCrypto = () => {
-  if (typeof globalThis !== 'undefined' && globalThis.crypto) {
-    return globalThis.crypto;
-  }
-  throw new Error('No crypto implementation available for PKCE.');
-};
+/**
+ * Generate a random state parameter for CSRF protection
+ */
+export function createState(): string {
+    const array = new Uint8Array(16);
+    crypto.getRandomValues(array);
+    return base64URLEncode(array);
+}
 
-const randomString = (length = 43) => {
-  const crypto = getCrypto();
-  const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
-  const result = [];
-  const randomValues = new Uint8Array(length);
-  if ('getRandomValues' in crypto) {
-    crypto.getRandomValues(randomValues);
-  } else {
-    throw new Error('No random generator available for PKCE.');
-  }
+/**
+ * Configuration for the Auth service
+ */
+export interface AuthConfig {
+    domain: string;
+    clientId: string;
+    clientSecret?: string;
+    redirectUri?: string;
+    logoutRedirectUri?: string;
+    scope?: string;
+    identityProviders?: string[];
+    googleProvider?: string;
+}
 
-  for (let i = 0; i < length; i++) {
-    result.push(charset.charAt(randomValues[i]! % charset.length));
-  }
-  return result.join('');
-};
+/**
+ * Token response from OAuth provider
+ */
+export interface AuthTokenResponse {
+    access_token: string;
+    refresh_token?: string;
+    id_token?: string;
+    token_type: string;
+    expires_in: number;
+}
 
-const base64UrlEncode = (buffer: ArrayBuffer) => {
-  const bytes = new Uint8Array(buffer);
-  let binary = '';
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]!);
-  }
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-};
-
-const sha256 = async (text: string) => {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(text);
-  const crypto = getCrypto();
-  if ('subtle' in crypto && crypto.subtle?.digest) {
-    return crypto.subtle.digest('SHA-256', data);
-  }
-  throw new Error('No SHA-256 implementation available.');
-};
-
-const decodeJwtPayload = <T extends Record<string, unknown>>(token?: string): T | null => {
-  if (!token) {
-    return null;
-  }
-
-  const parts = token.split('.');
-  if (parts.length < 2) {
-    return null;
-  }
-
-  const payload = parts[1] ?? '';
-  const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
-  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
-
-  try {
-    const decodeBase64 = (input: string) => {
-      if (typeof atob === 'function') {
-        return atob(input);
-      }
-      const globalBuffer = (globalThis as unknown as { Buffer?: { from: (value: string, encoding: string) => { toString: (encoding: string) => string } } }).Buffer;
-      if (globalBuffer?.from) {
-        return globalBuffer.from(input, 'base64').toString('binary');
-      }
-      throw new Error('Missing base64 decoder for JWT payload');
-    };
-
-    const decoded = decodeBase64(padded);
-    const json = decodeURIComponent(
-      decoded
-        .split('')
-        .map((c) => `%${`00${c.charCodeAt(0).toString(16)}`.slice(-2)}`)
-        .join(''),
-    );
-    return JSON.parse(json) as T;
-  } catch (error) {
-    console.warn('Failed to decode ID token payload', error);
-    return null;
-  }
-};
-
-const resolveConfigFromEnv = (): AuthConfig | null => {
-  const domain = import.meta.env.VITE_AUTH_DOMAIN as string | undefined;
-  const clientId = import.meta.env.VITE_AUTH_CLIENT_ID as string | undefined;
-
-  if (!domain || !clientId) {
-    return null;
-  }
-
-  return {
-    domain: normalizeDomain(domain),
-    clientId: clientId.trim(),
-    redirectUri: (import.meta.env.VITE_AUTH_REDIRECT_URI as string | undefined)?.trim() || '',
-    logoutUri: (import.meta.env.VITE_AUTH_LOGOUT_REDIRECT_URI as string | undefined)?.trim() || '',
-    clientSecret: (import.meta.env.VITE_AUTH_CLIENT_SECRET as string | undefined)?.trim() || undefined,
-    scope: (import.meta.env.VITE_AUTH_SCOPE as string | undefined)?.trim(),
-    identityProviders: DEFAULT_IDENTITY_PROVIDERS || undefined,
-  };
-};
-
-const authConfig = resolveConfigFromEnv();
-
-const getTokenEndpoint = (config: AuthConfig) => `https://${config.domain}/oauth2/token`;
-const getAuthorizeEndpoint = (config: AuthConfig) => `https://${config.domain}/oauth2/authorize`;
-const getLogoutEndpoint = (config: AuthConfig) => `https://${config.domain}/logout`;
-
-export const AUTH_SESSION_KEYS = {
-  codeVerifier: 'improview_pkce_code_verifier',
-  state: 'improview_pkce_state',
-  redirect: 'improview_post_login_redirect',
-} as const;
-
-export const createCodeVerifier = () => randomString(64);
-
-export const createState = () => randomString(32);
-
-export const createCodeChallenge = async (verifier: string) => {
-  const digest = await sha256(verifier);
-  return base64UrlEncode(digest);
-};
-
+/**
+ * Authentication service for OAuth 2.0 / Cognito
+ */
 export class AuthService {
-  constructor(private readonly config: AuthConfig | null) {}
+    private readonly config: AuthConfig;
+    private readonly authorizeEndpoint: string;
+    private readonly tokenEndpoint: string;
+    private readonly logoutEndpoint: string;
 
-  private ensureConfig(): AuthConfig {
-    if (!this.config) {
-      throw new AuthError(
-        'Auth configuration is missing. Ensure VITE_AUTH_DOMAIN and VITE_AUTH_CLIENT_ID are set.',
-        0,
-      );
-    }
-    if (!this.config.redirectUri) {
-      if (typeof window !== 'undefined') {
-        this.config.redirectUri = `${window.location.origin}/auth/callback`;
-      } else {
-        throw new AuthError('Auth redirect URI is not configured.', 0);
-      }
-    }
-    if (!this.config.logoutUri) {
-      if (typeof window !== 'undefined') {
-        this.config.logoutUri = window.location.origin;
-      } else {
-        throw new AuthError('Auth logout URI is not configured.', 0);
-      }
-    }
-    return this.config;
-  }
+    constructor(config: AuthConfig) {
+        this.config = {
+            ...config,
+            redirectUri: config.redirectUri || `${window.location.origin}/auth/callback`,
+            logoutRedirectUri: config.logoutRedirectUri || window.location.origin,
+            scope: config.scope || 'openid profile email',
+        };
 
-  buildAuthorizeUrl(params: { state: string; codeChallenge: string; identityProvider?: string; redirectUri?: string }) {
-    const config = this.ensureConfig();
-    const url = new URL(getAuthorizeEndpoint(config));
-    url.searchParams.set('response_type', 'code');
-    url.searchParams.set('client_id', config.clientId);
-    url.searchParams.set('redirect_uri', params.redirectUri ?? config.redirectUri);
-    url.searchParams.set('scope', config.scope || DEFAULT_SCOPE);
-    url.searchParams.set('state', params.state);
-    url.searchParams.set('code_challenge', params.codeChallenge);
-    url.searchParams.set('code_challenge_method', 'S256');
-    if (params.identityProvider) {
-      url.searchParams.set('identity_provider', params.identityProvider);
-    } else if (config.identityProviders) {
-      url.searchParams.set('identity_provider', config.identityProviders);
-    }
-    return url.toString();
-  }
+        // Normalize domain (remove protocol if present)
+        const domain = config.domain.replace(/^https?:\/\//, '');
 
-  async exchangeCode(code: string, codeVerifier: string, overrideRedirectUri?: string): Promise<AuthTokenResponse> {
-    const config = this.ensureConfig();
-    const body = new URLSearchParams();
-    body.set('grant_type', 'authorization_code');
-    body.set('client_id', config.clientId);
-    body.set('code', code);
-    body.set('code_verifier', codeVerifier);
-    body.set('redirect_uri', overrideRedirectUri ?? config.redirectUri);
-
-    if (config.clientSecret) {
-      body.set('client_secret', config.clientSecret);
+        this.authorizeEndpoint = `https://${domain}/oauth2/authorize`;
+        this.tokenEndpoint = `https://${domain}/oauth2/token`;
+        this.logoutEndpoint = `https://${domain}/logout`;
     }
 
-    const response = await fetch(getTokenEndpoint(config), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: body.toString(),
-    });
+    /**
+     * Initiate OAuth login flow with PKCE
+     */
+    public async initiateLogin(redirectPath?: string): Promise<void> {
+        const verifier = createCodeVerifier();
+        const challenge = await createCodeChallenge(verifier);
+        const state = createState();
 
-    const payload = await response.json().catch(() => null);
+        // Store PKCE parameters and redirect path in sessionStorage
+        sessionStorage.setItem('pkce_verifier', verifier);
+        sessionStorage.setItem('pkce_state', state);
+        if (redirectPath) {
+            sessionStorage.setItem('auth_redirect', redirectPath);
+        }
 
-    if (!response.ok) {
-      const message =
-        (payload &&
-          typeof payload === 'object' &&
-          'error_description' in payload &&
-          typeof payload.error_description === 'string'
-          ? payload.error_description
-          : 'Authentication failed');
-      throw new AuthError(message, response.status, payload ?? undefined);
+        // Build authorization URL
+        const params = new URLSearchParams({
+            client_id: this.config.clientId,
+            response_type: 'code',
+            redirect_uri: this.config.redirectUri!,
+            scope: this.config.scope!,
+            state,
+            code_challenge: challenge,
+            code_challenge_method: 'S256',
+        });
+
+        // Add identity provider if specified
+        if (this.config.identityProviders && this.config.identityProviders.length > 0) {
+            params.set('identity_provider', this.config.identityProviders[0]);
+        }
+
+        const authorizeUrl = `${this.authorizeEndpoint}?${params.toString()}`;
+        window.location.href = authorizeUrl;
     }
 
-    return this.normalizeTokenResponse(payload);
-  }
+    /**
+     * Initiate direct Google OAuth login flow (skips Cognito hosted UI)
+     */
+    public async initiateGoogleLogin(redirectPath?: string): Promise<void> {
+        const verifier = createCodeVerifier();
+        const challenge = await createCodeChallenge(verifier);
+        const state = createState();
 
-  async refreshWithToken(refreshToken: string): Promise<AuthTokenResponse> {
-    const config = this.ensureConfig();
-    const body = new URLSearchParams();
-    body.set('grant_type', 'refresh_token');
-    body.set('client_id', config.clientId);
-    body.set('refresh_token', refreshToken);
+        // Store PKCE parameters and redirect path in sessionStorage
+        sessionStorage.setItem('pkce_verifier', verifier);
+        sessionStorage.setItem('pkce_state', state);
+        if (redirectPath) {
+            sessionStorage.setItem('auth_redirect', redirectPath);
+        }
 
-    if (config.clientSecret) {
-      body.set('client_secret', config.clientSecret);
+        // Build authorization URL with Google as the identity provider
+        const params = new URLSearchParams({
+            client_id: this.config.clientId,
+            response_type: 'code',
+            redirect_uri: this.config.redirectUri!,
+            scope: this.config.scope!,
+            state,
+            code_challenge: challenge,
+            code_challenge_method: 'S256',
+            identity_provider: 'Google', // Force direct Google OAuth flow
+        });
+
+        const authorizeUrl = `${this.authorizeEndpoint}?${params.toString()}`;
+        window.location.href = authorizeUrl;
     }
 
-    const response = await fetch(getTokenEndpoint(config), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: body.toString(),
-    });
+    /**
+     * Handle OAuth callback and exchange code for tokens
+     */
+    public async handleCallback(code: string, state: string): Promise<AuthTokenResponse> {
+        // Validate state parameter
+        const storedState = sessionStorage.getItem('pkce_state');
+        if (!storedState || storedState !== state) {
+            throw new Error('Invalid state parameter');
+        }
 
-    const payload = await response.json().catch(() => null);
+        // Retrieve code verifier
+        const verifier = sessionStorage.getItem('pkce_verifier');
+        if (!verifier) {
+            throw new Error('Missing PKCE verifier');
+        }
 
-    if (!response.ok) {
-      const message =
-        (payload &&
-          typeof payload === 'object' &&
-          'error_description' in payload &&
-          typeof payload.error_description === 'string'
-          ? payload.error_description
-          : 'Token refresh failed');
-      throw new AuthError(message, response.status, payload ?? undefined);
+        // Exchange authorization code for tokens
+        const response = await this.exchangeCode(code, verifier);
+
+        // Clean up session storage
+        sessionStorage.removeItem('pkce_verifier');
+        sessionStorage.removeItem('pkce_state');
+
+        return response;
     }
 
-    return this.normalizeTokenResponse(payload);
-  }
+    /**
+     * Exchange authorization code for tokens
+     */
+    private async exchangeCode(code: string, verifier: string): Promise<AuthTokenResponse> {
+        const body = new URLSearchParams({
+            grant_type: 'authorization_code',
+            client_id: this.config.clientId,
+            code,
+            redirect_uri: this.config.redirectUri!,
+            code_verifier: verifier,
+        });
 
-  getLogoutUrl(postLogoutRedirectUri?: string) {
-    const config = this.ensureConfig();
-    const url = new URL(getLogoutEndpoint(config));
-    url.searchParams.set('client_id', config.clientId);
-    url.searchParams.set('logout_uri', postLogoutRedirectUri ?? config.logoutUri);
-    return url.toString();
-  }
+        // Add client secret for confidential clients
+        if (this.config.clientSecret) {
+            body.set('client_secret', this.config.clientSecret);
+        }
 
-  decodeUser(idToken: string | undefined, fallbackUsername?: string): { username: string; email?: string } {
-    const payload = decodeJwtPayload<Record<string, unknown>>(idToken);
-    if (!payload) {
-      return { username: fallbackUsername ?? '' };
+        const response = await fetch(this.tokenEndpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: body.toString(),
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Token exchange failed: ${errorText}`);
+        }
+
+        return response.json();
     }
 
-    const email = typeof payload.email === 'string' ? payload.email : undefined;
-    const usernameClaim =
-      (typeof payload['cognito:username'] === 'string' && payload['cognito:username']) ||
-      (typeof payload.preferred_username === 'string' && payload.preferred_username) ||
-      (typeof payload.username === 'string' && payload.username) ||
-      email ||
-      fallbackUsername;
+    /**
+     * Refresh access token using refresh token
+     */
+    public async refreshToken(refreshToken: string): Promise<AuthTokenResponse> {
+        const body = new URLSearchParams({
+            grant_type: 'refresh_token',
+            client_id: this.config.clientId,
+            refresh_token: refreshToken,
+        });
 
-    return {
-      username: (usernameClaim as string | undefined) ?? fallbackUsername ?? '',
-      email,
-    };
-  }
+        if (this.config.clientSecret) {
+            body.set('client_secret', this.config.clientSecret);
+        }
 
-  private normalizeTokenResponse(payload: Record<string, unknown> | null): AuthTokenResponse {
-    const accessToken = typeof payload?.access_token === 'string' ? payload.access_token : '';
-    if (!accessToken) {
-      throw new AuthError('Authentication response missing access token', 500, payload ?? undefined);
+        const response = await fetch(this.tokenEndpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: body.toString(),
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Token refresh failed: ${errorText}`);
+        }
+
+        return response.json();
     }
 
-    return {
-      accessToken,
-      idToken: typeof payload?.id_token === 'string' ? payload.id_token : undefined,
-      refreshToken: typeof payload?.refresh_token === 'string' ? payload.refresh_token : undefined,
-      expiresIn: typeof payload?.expires_in === 'number' ? payload.expires_in : undefined,
-      tokenType: typeof payload?.token_type === 'string' ? payload.token_type : undefined,
-    };
-  }
+    /**
+     * Initiate logout flow
+     */
+    public logout(): void {
+        const params = new URLSearchParams({
+            client_id: this.config.clientId,
+            logout_uri: this.config.logoutRedirectUri!,
+        });
+
+        const logoutUrl = `${this.logoutEndpoint}?${params.toString()}`;
+        window.location.href = logoutUrl;
+    }
+
+    /**
+     * Decode JWT ID token to extract user information
+     */
+    public decodeIdToken(idToken: string): User {
+        try {
+            const parts = idToken.split('.');
+            if (parts.length !== 3) {
+                throw new Error('Invalid ID token format');
+            }
+
+            const payload = JSON.parse(atob(parts[1]));
+
+            // Extract user information from standard OIDC claims
+            const username =
+                payload['cognito:username'] || payload.preferred_username || payload.sub || undefined;
+            const displayName = payload.name || username || payload.email || undefined;
+
+            const user = {
+                id: payload.sub ?? undefined,
+                username,
+                name: displayName,
+                email: payload.email,
+                created_at: payload['custom:created_at'] || payload.updated_at || undefined,
+                avatar_url: payload.picture || undefined,
+            };
+
+            return UserSchema.parse(user);
+        } catch (error) {
+            throw new Error(`Failed to decode ID token: ${error}`);
+        }
+    }
+
+    /**
+     * Get stored redirect path from session storage
+     */
+    public getRedirectPath(): string | null {
+        return sessionStorage.getItem('auth_redirect');
+    }
+
+    /**
+     * Clear stored redirect path
+     */
+    public clearRedirectPath(): void {
+        sessionStorage.removeItem('auth_redirect');
+    }
 }
-
-export const authService = new AuthService(authConfig);
-
-export const composeAuthUser = (params: { idToken?: string; fallbackUsername?: string }) =>
-  authService.decodeUser(params.idToken, params.fallbackUsername);

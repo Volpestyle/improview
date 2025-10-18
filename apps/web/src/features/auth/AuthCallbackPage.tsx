@@ -1,144 +1,111 @@
-import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from '@tanstack/react-router';
-import { Card, Spinner } from '@improview/ui';
-import { AUTH_SESSION_KEYS, authService, composeAuthUser } from '../../services/authService';
+import { useEffect, useRef } from 'react';
+import { useNavigate, useSearch } from '@tanstack/react-router';
+import { Loader2 } from 'lucide-react';
 import { useAuthStore } from '../../state/authStore';
+import { getAuthService } from '../../lib/auth';
+import { useToast } from '@improview/ui';
 
-type CallbackPageProps = {
-  code?: string;
-  state?: string;
-  error?: string;
-  errorDescription?: string;
-};
-
-type CallbackStatus = 'processing' | 'error';
-
-export const AuthCallbackPage = ({ code, state, error, errorDescription }: CallbackPageProps) => {
+export function AuthCallbackPage() {
   const navigate = useNavigate();
-  const login = useAuthStore((store) => store.login);
-  const markUnauthorized = useAuthStore((store) => store.markUnauthorized);
-  const [status, setStatus] = useState<CallbackStatus>('processing');
-  const [message, setMessage] = useState<string>('Finishing sign-in…');
-  const handledParamsRef = useRef<string | null>(null);
+  const search = useSearch({ from: '/auth/callback' }) as {
+    code?: string;
+    state?: string;
+    error?: string;
+  };
+  const login = useAuthStore((state) => state.login);
+  const { publish } = useToast();
+
+  // Track whether we've already handled the callback (prevents double-call in StrictMode)
+  const handledRef = useRef(false);
 
   useEffect(() => {
-    const paramsKey = JSON.stringify({
-      code: code ?? null,
-      state: state ?? null,
-      error: error ?? null,
-      errorDescription: errorDescription ?? null,
-    });
+    // Prevent double execution in React StrictMode
+    if (handledRef.current) return;
+    handledRef.current = true;
 
-    // Guard against StrictMode double-invoking the effect with identical params.
-    if (handledParamsRef.current === paramsKey) {
-      return;
-    }
-
-    handledParamsRef.current = paramsKey;
-
-    if (error) {
-      setStatus('error');
-      setMessage(errorDescription || error || 'Authentication cancelled.');
-      sessionStorage.removeItem(AUTH_SESSION_KEYS.codeVerifier);
-      sessionStorage.removeItem(AUTH_SESSION_KEYS.state);
-      sessionStorage.removeItem(AUTH_SESSION_KEYS.redirect);
-      return;
-    }
-
-    if (!code) {
-      setStatus('error');
-      setMessage('Missing authorization code.');
-      sessionStorage.removeItem(AUTH_SESSION_KEYS.codeVerifier);
-      sessionStorage.removeItem(AUTH_SESSION_KEYS.state);
-      sessionStorage.removeItem(AUTH_SESSION_KEYS.redirect);
-      return;
-    }
-
-    const storedState = sessionStorage.getItem(AUTH_SESSION_KEYS.state);
-    const storedVerifier = sessionStorage.getItem(AUTH_SESSION_KEYS.codeVerifier);
-    const redirectTo = sessionStorage.getItem(AUTH_SESSION_KEYS.redirect) ?? '/';
-
-    if (!storedState || !storedVerifier) {
-      setStatus('error');
-      setMessage('Authorization session expired. Please try signing in again.');
-      sessionStorage.removeItem(AUTH_SESSION_KEYS.codeVerifier);
-      sessionStorage.removeItem(AUTH_SESSION_KEYS.state);
-      sessionStorage.removeItem(AUTH_SESSION_KEYS.redirect);
-      return;
-    }
-
-    if (!state || state !== storedState) {
-      setStatus('error');
-      setMessage('State mismatch detected. Please retry signing in.');
-      sessionStorage.removeItem(AUTH_SESSION_KEYS.codeVerifier);
-      sessionStorage.removeItem(AUTH_SESSION_KEYS.state);
-      sessionStorage.removeItem(AUTH_SESSION_KEYS.redirect);
-      markUnauthorized();
-      return;
-    }
-
-    const finishLogin = async () => {
+    const handleCallback = async () => {
       try {
-        const tokens = await authService.exchangeCode(code, storedVerifier);
-        const user = composeAuthUser({ idToken: tokens.idToken, fallbackUsername: 'user' });
+        // Check for errors
+        if (search.error) {
+          throw new Error(search.error);
+        }
+
+        // Validate required params
+        if (!search.code || !search.state) {
+          throw new Error('Missing required OAuth parameters');
+        }
+
+        const authService = getAuthService();
+
+        // Exchange code for tokens
+        const tokenResponse = await authService.handleCallback(search.code, search.state);
+
+        // Decode user from ID token
+        const user = tokenResponse.id_token
+          ? authService.decodeIdToken(tokenResponse.id_token)
+          : { username: 'unknown', name: 'Improview user' };
+
+        // Update auth store
         login({
-          accessToken: tokens.accessToken,
-          idToken: tokens.idToken,
-          refreshToken: tokens.refreshToken,
-          expiresIn: tokens.expiresIn,
+          accessToken: tokenResponse.access_token,
+          refreshToken: tokenResponse.refresh_token,
+          idToken: tokenResponse.id_token,
+          expiresIn: tokenResponse.expires_in,
           user,
         });
-        sessionStorage.removeItem(AUTH_SESSION_KEYS.codeVerifier);
-        sessionStorage.removeItem(AUTH_SESSION_KEYS.state);
-        sessionStorage.removeItem(AUTH_SESSION_KEYS.redirect);
-        setMessage('Signed in successfully. Redirecting…');
-        await navigate({ to: redirectTo as never, replace: true });
-      } catch (err) {
-        console.error('Failed to exchange authorization code', err);
-        setStatus('error');
-        setMessage(
-          err instanceof Error ? err.message : 'Failed to complete sign-in. Please try again.',
-        );
-        sessionStorage.removeItem(AUTH_SESSION_KEYS.codeVerifier);
-        sessionStorage.removeItem(AUTH_SESSION_KEYS.state);
-        sessionStorage.removeItem(AUTH_SESSION_KEYS.redirect);
-        markUnauthorized();
+
+        // Get redirect path
+        const redirectPath = authService.getRedirectPath();
+        authService.clearRedirectPath();
+
+        // Navigate to redirect path or home
+        navigate({ to: redirectPath || '/' });
+
+        // Show success toast
+        const welcomeName = user.name ?? user.username ?? 'there';
+        publish({
+          title: 'Signed in successfully',
+          description: `Welcome back, ${welcomeName}!`,
+          variant: 'success',
+        });
+      } catch (error) {
+        console.error('OAuth callback error:', error);
+
+        // Clear session storage
+        sessionStorage.removeItem('pkce_verifier');
+        sessionStorage.removeItem('pkce_state');
+        sessionStorage.removeItem('auth_redirect');
+
+        // Mark unauthorized
+        useAuthStore.getState().markUnauthorized();
+
+        // Show error toast
+        publish({
+          title: 'Authentication failed',
+          description: error instanceof Error ? error.message : 'An unknown error occurred',
+          variant: 'error',
+        });
+
+        // Redirect to login
+        navigate({ to: '/auth/login' });
       }
     };
 
-    void finishLogin();
-  }, [code, error, errorDescription, login, markUnauthorized, navigate, state]);
-
-  if (status === 'processing') {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-bg px-4 py-10">
-        <Card padding="lg" className="w-full max-w-md text-center shadow-lg">
-          <div className="flex flex-col items-center gap-4">
-            <Spinner size="lg" />
-            <p className="text-sm text-fg-muted">{message}</p>
-          </div>
-        </Card>
-      </div>
-    );
-  }
+    handleCallback();
+  }, [search, login, navigate, publish]);
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-bg px-4 py-10">
-      <Card padding="lg" className="w-full max-w-md text-center shadow-lg">
-        <div className="flex flex-col items-center gap-4">
-          <p className="text-md font-semibold text-danger-600">Sign-in failed</p>
-          <p className="text-sm text-fg-muted">{message}</p>
-          <button
-            type="button"
-            className="text-sm font-medium text-accent underline"
-            onClick={() => {
-              void navigate({ to: '/auth/login', replace: true, search: { redirect: '/' } });
-            }}
-          >
-            Return to sign-in
-          </button>
-        </div>
-      </Card>
+    <div
+      className="min-h-screen flex items-center justify-center"
+      style={{ backgroundColor: 'var(--bg-default)' }}
+    >
+      <div className="text-center space-y-4">
+        <Loader2
+          className="h-12 w-12 animate-spin mx-auto"
+          style={{ color: 'var(--accent-primary)' }}
+        />
+        <p style={{ color: 'var(--fg-muted)' }}>Completing sign in...</p>
+      </div>
     </div>
   );
-};
+}

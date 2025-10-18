@@ -1,56 +1,89 @@
-import { ApiService, createApiService } from '../services/apiService';
+import { ApiService } from './client';
 import {
-  CreateAttemptRequest,
-  CreateAttemptResponse,
-  GenerateRequest,
-  GenerateResponse,
-  GetAttemptResponse,
-  ProblemPack,
-  ProblemPackSchema,
-  RunTestsRequest,
-  RunTestsResponse,
-  SubmitRequest,
-  SubmitResponse,
-  CreateAttemptResponseSchema,
-  GenerateResponseSchema,
-  GetAttemptResponseSchema,
-  RunTestsResponseSchema,
-  SubmitResponseSchema,
-} from './types';
+    GenerateRequest,
+    GenerateResponse,
+    CreateAttemptRequest,
+    CreateAttemptResponse,
+    RunTestsRequest,
+    RunTestsResponse,
+    SubmitRequest,
+    SubmitResponse,
+    AttemptWithRuns,
+    GenerateResponseSchema,
+    CreateAttemptResponseSchema,
+    RunTestsResponseSchema,
+    SubmitResponseSchema,
+    AttemptWithRunsSchema,
+} from '../types/api';
+import { ProblemPack, ProblemPackSchema } from '../types/problem';
 
-export class RestApiClient {
-  private readonly api: ApiService;
+/**
+ * REST client for the Improview API
+ * Provides typed methods for all API endpoints with Zod validation
+ */
+export class RestClient {
+    constructor(private readonly apiService: ApiService) { }
 
-  constructor(private readonly baseUrl: string, apiService?: ApiService) {
-    this.api = apiService ?? createApiService(baseUrl);
-  }
+    /**
+     * Generate a new problem pack
+     */
+    public async generate(request: GenerateRequest): Promise<GenerateResponse> {
+        const response = await this.apiService.post<unknown>('/api/generate', request);
+        return GenerateResponseSchema.parse(response);
+    }
 
-  private async request<T>(path: string, init: RequestInit, schema: { parse: (data: unknown) => T }) {
-    const payload = await this.api.request(path, init);
-    return schema.parse(payload);
-  }
+    /**
+     * Create a new attempt for a problem
+     */
+    public async createAttempt(request: CreateAttemptRequest): Promise<CreateAttemptResponse> {
+        const response = await this.apiService.post<unknown>('/api/attempt', request);
+        return CreateAttemptResponseSchema.parse(response);
+    }
 
-  async generate(request: GenerateRequest): Promise<GenerateResponse> {
-    return this.request('/api/generate', { method: 'POST', body: JSON.stringify(request) }, GenerateResponseSchema);
-  }
+    /**
+     * Run tests for an attempt
+     */
+    public async runTests(request: RunTestsRequest): Promise<RunTestsResponse> {
+        const response = await this.apiService.post<unknown>('/api/run-tests', request);
+        return RunTestsResponseSchema.parse(response);
+    }
 
-  async createAttempt(request: CreateAttemptRequest): Promise<CreateAttemptResponse> {
-    return this.request('/api/attempt', { method: 'POST', body: JSON.stringify(request) }, CreateAttemptResponseSchema);
-  }
+    /**
+     * Submit an attempt (runs hidden tests)
+     */
+    public async submit(request: SubmitRequest): Promise<SubmitResponse> {
+        const response = await this.apiService.post<unknown>('/api/submit', request);
+        return SubmitResponseSchema.parse(response);
+    }
 
-  async runTests(request: RunTestsRequest): Promise<RunTestsResponse> {
-    return this.request('/api/run-tests', { method: 'POST', body: JSON.stringify(request) }, RunTestsResponseSchema);
-  }
+    /**
+     * Get attempt by ID with runs
+     */
+    public async getAttempt(attemptId: string): Promise<AttemptWithRuns> {
+        const response = await this.apiService.get<unknown>(`/api/attempt/${attemptId}`);
+        return AttemptWithRunsSchema.parse(response);
+    }
 
-  async submit(request: SubmitRequest): Promise<SubmitResponse> {
-    return this.request('/api/submit', { method: 'POST', body: JSON.stringify(request) }, SubmitResponseSchema);
-  }
+    /**
+     * Get problem pack by ID
+     */
+    public async getProblem(problemId: string): Promise<ProblemPack> {
+        const response = await this.apiService.get<unknown>(`/api/problem/${problemId}`);
+        return ProblemPackSchema.parse(response);
+    }
 
-  async getAttempt(attemptId: string): Promise<GetAttemptResponse> {
-    return this.request(`/api/attempt/${attemptId}`, { method: 'GET' }, GetAttemptResponseSchema);
-  }
+    /**
+     * Health check
+     */
+    public async healthz(): Promise<{ status: string }> {
+        return this.apiService.get<{ status: string }>('/api/healthz');
+    }
 
-  async getProblem(problemId: string): Promise<ProblemPack> {
-    return this.request(`/api/problem/${problemId}`, { method: 'GET' }, ProblemPackSchema);
-  }
+    /**
+     * Get version info
+     */
+    public async version(): Promise<{ version: string }> {
+        return this.apiService.get<{ version: string }>('/api/version');
+    }
 }
+

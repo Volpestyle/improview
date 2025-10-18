@@ -1,1 +1,2 @@
-export * from './Toast';
+export { ToastProvider, useToast, type ToastOptions, type ToastVariant } from './Toast';
+

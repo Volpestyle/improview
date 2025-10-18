@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Improview UI Library Demo</title>
+    <link rel="preconnect" href="https://fonts.cdnfonts.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.cdnfonts.com/css/geist" />
+    <script>
+      (function () {
+        try {
+          var storageKey = 'improview-ui-theme';
+          var fallback = 'system';
+          var stored = null;
+          try {
+            stored = localStorage.getItem(storageKey);
+          } catch (e) {}
+          var theme = stored === null ? fallback : stored;
+          var mqlSupported = typeof window.matchMedia === 'function';
+          var resolve = function () {
+            if (mqlSupported) {
+              return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            }
+            return 'light';
+          };
+          var resolved = theme === 'system' ? resolve() : theme;
+          if (resolved !== 'light' && resolved !== 'dark') {
+            resolved = resolve();
+          }
+          document.documentElement.setAttribute('data-theme', resolved);
+          document.documentElement.style.colorScheme = resolved;
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

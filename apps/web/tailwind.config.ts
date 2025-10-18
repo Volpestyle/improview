@@ -1,5 +1,5 @@
 import type { Config } from 'tailwindcss';
-import tokens from '../../tokens/tokens.json';
+import tokens from '@improview/ui/tokens';
 
 const rem = (value: number) => `${value / 16}rem`;
 
@@ -62,8 +62,8 @@ const config: Config = {
       spacing: space,
       borderRadius: radius,
       boxShadow: {
-        sm: tokens.shadow.sm,
-        md: tokens.shadow.md,
+        sm: 'var(--shadow-sm)',
+        md: 'var(--shadow-md)',
       },
       fontFamily: {
         sans: tokens.font.family.sans.split(',').map((x) => x.trim()),

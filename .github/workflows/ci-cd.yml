@@ -71,22 +71,22 @@ jobs:
       contents: read
       id-token: write
     env:
-      AWS_REGION: ${{ secrets.AWS_REGION != '' && secrets.AWS_REGION || vars.AWS_REGION }}
-      FRONTEND_BUILD_DIR: ${{ secrets.FRONTEND_BUILD_DIR != '' && secrets.FRONTEND_BUILD_DIR || vars.FRONTEND_BUILD_DIR }}
-      IMPROVIEW_ENV: ${{ secrets.IMPROVIEW_ENV != '' && secrets.IMPROVIEW_ENV || vars.IMPROVIEW_ENV }}
-      BASE_URL: ${{ secrets.BASE_URL != '' && secrets.BASE_URL || vars.BASE_URL }}
-      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID != '' && secrets.GOOGLE_CLIENT_ID || vars.GOOGLE_CLIENT_ID }}
-      GOOGLE_CLIENT_SCOPES: ${{ secrets.GOOGLE_CLIENT_SCOPES != '' && secrets.GOOGLE_CLIENT_SCOPES || vars.GOOGLE_CLIENT_SCOPES }}
+      AWS_REGION: ${{ secrets.AWS_REGION || vars.AWS_REGION }}
+      FRONTEND_BUILD_DIR: ${{ secrets.FRONTEND_BUILD_DIR || vars.FRONTEND_BUILD_DIR }}
+      IMPROVIEW_ENV: ${{ secrets.IMPROVIEW_ENV || vars.IMPROVIEW_ENV }}
+      BASE_URL: ${{ secrets.BASE_URL || vars.BASE_URL }}
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID || vars.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SCOPES: ${{ secrets.GOOGLE_CLIENT_SCOPES || vars.GOOGLE_CLIENT_SCOPES }}
       GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-      USER_POOL_ID: ${{ secrets.USER_POOL_ID != '' && secrets.USER_POOL_ID || vars.USER_POOL_ID }}
-      USER_POOL_CLIENT_ID: ${{ secrets.USER_POOL_CLIENT_ID != '' && secrets.USER_POOL_CLIENT_ID || vars.USER_POOL_CLIENT_ID }}
-      USER_POOL_CLIENT_IDS: ${{ secrets.USER_POOL_CLIENT_IDS != '' && secrets.USER_POOL_CLIENT_IDS || secrets.COGNITO_APP_CLIENT_IDS != '' && secrets.COGNITO_APP_CLIENT_IDS || vars.USER_POOL_CLIENT_IDS }}
+      USER_POOL_ID: ${{ secrets.USER_POOL_ID || vars.USER_POOL_ID }}
+      USER_POOL_CLIENT_ID: ${{ secrets.USER_POOL_CLIENT_ID || vars.USER_POOL_CLIENT_ID }}
+      USER_POOL_CLIENT_IDS: ${{ secrets.USER_POOL_CLIENT_IDS || secrets.COGNITO_APP_CLIENT_IDS || vars.USER_POOL_CLIENT_IDS }}
       AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      SMOKE_USER: ${{ 'smoke-tester@improview.dev' }}
-      SMOKE_SECRET_NAME: ${{ (vars.IMPROVIEW_ENV != '' && format('improview/{0}/smoke-credentials', vars.IMPROVIEW_ENV) || 'improview/dev/smoke-credentials') }}
-      SMOKE_SECRET_DESCRIPTION: ${{ 'Cognito smoke-test credentials' }}
+      SMOKE_USER: smoke-tester@improview.dev
+      SMOKE_SECRET_NAME: ${{ vars.IMPROVIEW_ENV && format('improview/{0}/smoke-credentials', vars.IMPROVIEW_ENV) || 'improview/dev/smoke-credentials' }}
+      SMOKE_SECRET_DESCRIPTION: Cognito smoke-test credentials
     steps:
       - name: Determine deployment eligibility
         id: deployment_guard

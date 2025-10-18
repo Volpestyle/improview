@@ -1,119 +1,180 @@
 import { useMemo } from 'react';
-import { useNavigate } from '@tanstack/react-router';
-import { Button, Card, Tag } from '@improview/ui';
-import { Attempt, ProblemPack, RunResult, SubmitResponse } from '../../api/types';
+import { useNavigate, useParams } from '@tanstack/react-router';
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  ScrollArea,
+} from '@improview/ui';
+import { BreadcrumbsNav } from '../../components/BreadcrumbsNav';
+import { mockAttempts } from '../../data/mockUser';
+import { CheckCircle2, Clock, Code, Flame, RefreshCcw, XCircle } from 'lucide-react';
 
-interface ResultsPageProps {
-  attempt: Attempt;
-  problem: ProblemPack;
-  summary: SubmitResponse['summary'];
-  runs: RunResult[];
-}
-
-export const ResultsPage = ({ attempt, problem, summary, runs }: ResultsPageProps) => {
-  const navigate = useNavigate();
-  const hiddenResults = summary.hidden_results;
-  const publicResults = runs.filter((run) => run.test_id.startsWith('public'));
-  const passedHidden = hiddenResults.every((result) => result.status === 'passed');
-
-  const totalRuntime = useMemo(() => {
-    if (summary.runtime_ms) {
-      return summary.runtime_ms;
-    }
-    return hiddenResults.reduce((acc, result) => acc + (result.time_ms ?? 0), 0);
-  }, [hiddenResults, summary.runtime_ms]);
-
-  return (
-    <div className="mx-auto flex w-full max-w-4xl flex-col gap-8 px-4 py-8 sm:px-6 lg:px-8">
-      <header className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <Tag tone={passedHidden ? 'success' : 'danger'}>
-            {passedHidden ? 'All tests passed' : 'Hidden tests failed'}
-          </Tag>
-          <Tag tone="accent">{problem.problem.title}</Tag>
-          <Tag tone="default">{attempt.lang.toUpperCase()}</Tag>
-        </div>
-        <h1 className="text-3xl font-semibold text-fg">Results summary</h1>
-        <p className="text-lg text-fg-muted">
-          Hidden tests {passedHidden ? 'confirmed your solution.' : 'found regressions. Review the details below to iterate.'}
-        </p>
-      </header>
-
-      <div className="grid gap-6 sm:grid-cols-2">
-        <Card heading="Runtime" padding="lg">
-          <p className="text-2xl font-semibold text-fg">{totalRuntime} ms</p>
-          <p className="text-sm text-fg-muted">Aggregate hidden test runtime</p>
-        </Card>
-        <Card heading="Operations" padding="lg">
-          <p className="text-2xl font-semibold text-fg">{summary.operations ?? '—'}</p>
-          <p className="text-sm text-fg-muted">Estimated operations performed</p>
-        </Card>
-      </div>
-
-      <Card heading="Hidden test results" padding="lg">
-        <TestResultsTable results={hiddenResults} />
-      </Card>
-
-      <Card heading="Public test runs" padding="lg">
-        {publicResults.length === 0 ? (
-          <p className="text-sm text-fg-muted">No public test runs recorded for this attempt.</p>
-        ) : (
-          <TestResultsTable results={publicResults} />
-        )}
-      </Card>
-
-      <div className="flex flex-wrap gap-3">
-        <Button variant="primary" onClick={() => navigate({ to: '/' })}>
-          Generate another problem
-        </Button>
-        <Button
-          variant="secondary"
-          onClick={() => navigate({ to: '/workspace/$attemptId', params: { attemptId: attempt.id } })}
-        >
-          Re-open workspace
-        </Button>
-      </div>
-    </div>
-  );
+const formatDuration = (ms: number) => {
+  const minutes = Math.floor(ms / 60000);
+  const seconds = Math.floor((ms % 60000) / 1000);
+  return `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
 };
 
-const TestResultsTable = ({ results }: { results: RunResult[] }) => (
-  <div className="overflow-hidden rounded-md border border-border-subtle">
-    <table className="min-w-full divide-y divide-border-subtle text-sm text-fg">
-      <thead className="bg-bg-sunken text-left text-xs uppercase tracking-wide text-fg-muted">
-        <tr>
-          <th className="px-4 py-3">Test</th>
-          <th className="px-4 py-3">Status</th>
-          <th className="px-4 py-3">Runtime</th>
-          <th className="px-4 py-3">Stdout</th>
-          <th className="px-4 py-3">Stderr</th>
-        </tr>
-      </thead>
-      <tbody>
-        {results.map((result) => (
-          <tr key={result.test_id} className="divide-x divide-border-subtle">
-            <td className="px-4 py-3 font-medium">{result.test_id}</td>
-            <td
-              className={`px-4 py-3 font-semibold ${
-                result.status === 'passed' ? 'text-success-600' : 'text-danger-600'
-              }`}
+export function ResultsPage() {
+  const { attemptId } = useParams({ from: '/results/$attemptId' });
+  const navigate = useNavigate();
+
+  const attempt = useMemo(
+    () => mockAttempts.find((entry) => entry.id === attemptId),
+    [attemptId],
+  );
+
+  if (!attempt) {
+    return (
+      <div className="min-h-screen" style={{ backgroundColor: 'var(--bg-default)' }}>
+        <main className="mx-auto flex max-w-3xl flex-col items-center gap-6 px-6 py-16 text-center">
+          <h1>Results unavailable</h1>
+          <p style={{ color: 'var(--fg-muted)' }}>
+            We couldn’t find a record for this attempt yet. Submissions created before this update
+            may not include detailed results. Try running a new problem to generate fresh data.
+          </p>
+          <Button onClick={() => navigate({ to: '/' })}>Back to practice</Button>
+        </main>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen" style={{ backgroundColor: 'var(--bg-default)' }}>
+      <header
+        className="border-b px-6 py-4"
+        style={{ backgroundColor: 'var(--bg-panel)', borderColor: 'var(--border-default)' }}
+      >
+        <div className="mx-auto flex max-w-6xl flex-col gap-3">
+          <BreadcrumbsNav
+            items={[
+              { label: 'Home', onClick: () => navigate({ to: '/' }) },
+              {
+                label: 'Workspace',
+                onClick: () =>
+                  navigate({
+                    to: '/workspace/$attemptId',
+                    params: { attemptId },
+                  }),
+              },
+              { label: 'Results' },
+            ]}
+          />
+          <div>
+            <h1>{attempt.problem_title}</h1>
+            <p style={{ color: 'var(--fg-muted)' }}>Review your submission outcome and next steps.</p>
+          </div>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-6xl px-6 py-8 space-y-8">
+        <section className="grid gap-6 lg:grid-cols-[2fr_3fr]">
+          <Card>
+            <CardHeader className="space-y-4">
+              <div className="flex items-center gap-2">
+                {attempt.passed ? (
+                  <Badge variant="outline" className="gap-1 text-success-600">
+                    <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                    Passed
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="gap-1 text-danger-600">
+                    <XCircle className="h-4 w-4" aria-hidden="true" />
+                    Failed
+                  </Badge>
+                )}
+                <Badge variant="secondary" className="uppercase">{attempt.category}</Badge>
+              </div>
+              <CardTitle className="text-3xl">Attempt summary</CardTitle>
+              <CardDescription>
+                Started {new Date(attempt.started_at).toLocaleString()} · Completed{' '}
+                {new Date(attempt.ended_at).toLocaleString()}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 sm:grid-cols-2">
+              <SummaryMetric
+                icon={<Clock className="h-5 w-5" aria-hidden="true" />}
+                label="Duration"
+                value={formatDuration(attempt.duration_ms)}
+              />
+              <SummaryMetric
+                icon={<Code className="h-5 w-5" aria-hidden="true" />}
+                label="Public tests"
+                value={`${attempt.pass_count} pass / ${attempt.fail_count} fail`}
+              />
+              <SummaryMetric
+                icon={<Flame className="h-5 w-5" aria-hidden="true" />}
+                label="Hint usage"
+                value={attempt.hint_used ? 'Hint viewed' : 'No hints used'}
+              />
+              <SummaryMetric
+                icon={<RefreshCcw className="h-5 w-5" aria-hidden="true" />}
+                label="Next steps"
+                value={attempt.passed ? 'Review solution and iterate' : 'Revisit approach'}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Solution snapshot</CardTitle>
+              <CardDescription>Quick reference of the code you submitted.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ScrollArea className="max-h-80 rounded-lg border border-border-subtle bg-bg-sunken p-4">
+                <pre className="text-sm leading-6" style={{ color: 'var(--fg-muted)' }}>
+                  <code>{attempt.code}</code>
+                </pre>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </section>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>What to do next</CardTitle>
+            <CardDescription>
+              Reflect on this attempt and schedule another practice session to stay sharp.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap items-center gap-3">
+            <Button onClick={() => navigate({ to: '/' })}>Generate new problem</Button>
+            <Button
+              variant="outline"
+              onClick={() =>
+                navigate({ to: '/workspace/$attemptId', params: { attemptId } })
+              }
             >
-              {result.status.toUpperCase()}
-            </td>
-            <td className="px-4 py-3 text-fg-muted">{result.time_ms ?? '—'} ms</td>
-            <td className="px-4 py-3 text-xs text-fg-muted">
-              <pre className="max-h-24 overflow-auto whitespace-pre-wrap break-all">
-                {result.stdout ?? ''}
-              </pre>
-            </td>
-            <td className="px-4 py-3 text-xs text-danger-600">
-              <pre className="max-h-24 overflow-auto whitespace-pre-wrap break-all">
-                {result.stderr ?? ''}
-              </pre>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+              Re-open workspace
+            </Button>
+          </CardContent>
+        </Card>
+      </main>
+    </div>
+  );
+}
+
+interface SummaryMetricProps {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+}
+
+const SummaryMetric = ({ icon, label, value }: SummaryMetricProps) => (
+  <div className="flex items-start gap-3 rounded-lg border border-border-subtle bg-bg-panel/60 p-3">
+    <span className="rounded-full bg-bg-sunken p-2" aria-hidden="true">
+      {icon}
+    </span>
+    <div className="space-y-1">
+      <p className="text-sm" style={{ color: 'var(--fg-muted)' }}>
+        {label}
+      </p>
+      <p className="font-medium text-fg-default">{value}</p>
+    </div>
   </div>
 );
