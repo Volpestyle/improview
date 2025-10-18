@@ -54,3 +54,4 @@ export {
   BreadcrumbSeparator,
 } from './breadcrumb';
 export { Skeleton, type SkeletonProps } from './Skeleton/Skeleton';
+export { SplitPane } from './split-pane';

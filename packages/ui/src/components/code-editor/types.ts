@@ -1,3 +1,13 @@
+import type {
+  SandpackFiles,
+  SandpackOptions,
+  SandpackPredefinedTemplate,
+  SandpackSetup,
+  SandpackThemeProp,
+} from '@codesandbox/sandpack-react';
+
+export type SupportedLanguage = 'javascript' | 'typescript' | 'plaintext';
+
 export type TestStatus = 'pass' | 'fail' | 'error';
 
 export interface TestResult {
@@ -16,3 +26,11 @@ export interface SubmitResult {
   passed: boolean;
   results: TestResult[];
 }
+
+export type {
+  SandpackFiles,
+  SandpackOptions,
+  SandpackPredefinedTemplate,
+  SandpackSetup,
+  SandpackThemeProp,
+};
