@@ -1,22 +1,22 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useParams, useNavigate } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import {
   Button,
+  CodeEditorPanel,
   ScrollArea,
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
   ThemeToggle,
   useToast,
+  type SubmitResult,
+  type TestResult as EditorTestResult,
 } from '@improview/ui';
-import { ArrowLeft, Play, Send, Loader2, CheckCircle2, XCircle, Eye, EyeOff } from 'lucide-react';
+import { ArrowLeft, Loader2, Eye, EyeOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getApiClient } from '../../lib/apiClient';
 import { queryKeys } from '../../lib/queryClient';
-import { TestResult } from '../../types/problem';
-import { usePersistedState } from '../../lib/hooks';
+import { RunResult, MacroCategory } from '../../types/problem';
+import { useTestExecution, usePersistedState } from '../../lib/hooks';
+import { getSandboxConfigForCategory, inferMacroCategoryFromProblem } from '../../utils/sandboxConfig';
 
 export function WorkspacePage() {
   const { attemptId } = useParams({ from: '/workspace/$attemptId' });
@@ -36,6 +36,19 @@ export function WorkspacePage() {
 
   const problem = attemptData?.problem;
 
+  const inferredMacroCategory = useMemo<MacroCategory>(
+    () => (problem ? inferMacroCategoryFromProblem(problem) : 'dsa'),
+    [problem],
+  );
+
+  const sandboxConfig = useMemo(
+    () => getSandboxConfigForCategory(inferredMacroCategory),
+    [inferredMacroCategory],
+  );
+
+  // Test execution (no persistence - just runs tests)
+  const { runTestsAsync } = useTestExecution();
+
   // Editor state
   const initialCode = problem
     ? `function ${problem.api.function_name}(${problem.api.params.map((p) => p.name).join(', ')}) {
@@ -45,28 +58,33 @@ export function WorkspacePage() {
     : '';
 
   const [code, setCode] = usePersistedState(`attempt:${attemptId}:code`, initialCode);
-  const [testResults, setTestResults] = useState<TestResult[] | null>(null);
-  const [isRunning, setIsRunning] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [hintVisible, setHintVisible] = useState(false);
 
-  const handleRunTests = async () => {
-    setIsRunning(true);
+  const mapStatusToEditor = (status: string): EditorTestResult['status'] => {
+    if (status === 'pass' || status === 'fail') {
+      return status;
+    }
+    return 'error';
+  };
+
+  const mapRunResultToEditor = (result: RunResult): EditorTestResult => ({
+    id: result.test_id,
+    status: mapStatusToEditor(result.status),
+    timeMs: Number(result.time_ms),
+    stdout: result.stdout,
+    stderr: result.stderr,
+    message: result.status === 'timeout' || result.status === 'error' ? result.status : undefined,
+  });
+
+  const handleRunTests = async (source: string): Promise<EditorTestResult[]> => {
     try {
-      const response = await apiClient.runTests({
+      const response = await runTestsAsync({
         attempt_id: attemptId,
-        code,
+        code: source,
         which: 'public',
       });
-      setTestResults(
-        response.summary.results.map((r) => ({
-          test_id: r.test_id,
-          status: r.status as TestResult['status'],
-          time_ms: Number(r.time_ms),
-          stdout: r.stdout,
-          stderr: r.stderr,
-        })),
-      );
+
+      return response.summary.results.map(mapRunResultToEditor);
     } catch (error) {
       console.error('Test execution failed:', error);
       publish({
@@ -74,24 +92,18 @@ export function WorkspacePage() {
         description: error instanceof Error ? error.message : 'An unknown error occurred',
         variant: 'error',
       });
-    } finally {
-      setIsRunning(false);
+      throw error instanceof Error ? error : new Error('Test execution failed');
     }
   };
 
-  const handleSubmit = async () => {
-    setIsSubmitting(true);
+  const handleSubmit = async (source: string): Promise<SubmitResult> => {
     try {
       const response = await apiClient.submit({
         attempt_id: attemptId,
-        code,
+        code: source,
       });
 
-      // Navigate to results page
-      navigate({
-        to: '/results/$attemptId',
-        params: { attemptId },
-      });
+      const results = response.summary.hidden_results.map(mapRunResultToEditor);
 
       publish({
         title: response.summary.passed ? 'Submission passed!' : 'Submission failed',
@@ -100,6 +112,16 @@ export function WorkspacePage() {
           : 'Some tests failed. Review your solution.',
         variant: response.summary.passed ? 'success' : 'error',
       });
+
+      navigate({
+        to: '/results/$attemptId',
+        params: { attemptId },
+      });
+
+      return {
+        passed: response.summary.passed,
+        results,
+      };
     } catch (error) {
       console.error('Submission failed:', error);
       publish({
@@ -107,8 +129,7 @@ export function WorkspacePage() {
         description: error instanceof Error ? error.message : 'An unknown error occurred',
         variant: 'error',
       });
-    } finally {
-      setIsSubmitting(false);
+      throw error instanceof Error ? error : new Error('Submission failed');
     }
   };
 
@@ -123,7 +144,6 @@ export function WorkspacePage() {
     );
   }
 
-  const lineNumbers = code.split('\n').length;
   const shouldReduceMotion =
     typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -156,20 +176,6 @@ export function WorkspacePage() {
           <div style={{ color: 'var(--fg-muted)' }}>{problem.problem.title}</div>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-2"
-            onClick={handleRunTests}
-            disabled={isRunning}
-          >
-            {isRunning ? (
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-            ) : (
-              <Play className="h-4 w-4" aria-hidden="true" />
-            )}
-            Run public tests
-          </Button>
           <ThemeToggle />
         </div>
       </motion.header>
@@ -260,23 +266,39 @@ export function WorkspacePage() {
                     {hintVisible ? 'Hide Hint' : 'Show Hint'}
                   </span>
                 </Button>
-                <AnimatePresence>
-                  {hintVisible && (
+                <AnimatePresence initial={false}>
+                  {hintVisible ? (
                     <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      exit={{ opacity: 0, height: 0 }}
-                      transition={{ duration: 0.3 }}
-                      className="rounded-lg p-4"
+                      key="hint"
+                      layout
+                      initial={{ opacity: 0, scaleY: 0.9 }}
+                      animate={{ opacity: 1, scaleY: 1 }}
+                      exit={{ opacity: 0, scaleY: 0.9 }}
+                      transition={{
+                        opacity: { duration: 0.16, ease: 'easeOut' },
+                        scaleY: { duration: 0.24, ease: [0.22, 1, 0.36, 1] },
+                        layout: { duration: 0.24, ease: [0.22, 1, 0.36, 1] },
+                      }}
                       style={{
+                        originY: 0,
                         backgroundColor: 'var(--accent-soft)',
                         borderColor: 'var(--accent-primary)',
                         borderWidth: '1px',
                       }}
+                      className="mt-2 rounded-lg border p-4"
                     >
-                      💡 {problem.hint}
+                      <motion.span
+                        layout
+                        initial={{ opacity: 0, y: -8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -8 }}
+                        transition={{ duration: 0.18, ease: 'easeOut' }}
+                        className="block"
+                      >
+                        💡 {problem.hint}
+                      </motion.span>
                     </motion.div>
-                  )}
+                  ) : null}
                 </AnimatePresence>
               </div>
             </div>
@@ -284,200 +306,26 @@ export function WorkspacePage() {
         </div>
 
         {/* Editor Panel */}
-        <div className="w-1/2 flex flex-col" style={{ backgroundColor: 'var(--bg-sunken)' }}>
-          {/* Editor Header */}
-          <div
-            className="flex items-center justify-between px-4 py-2 border-b"
-            style={{
-              backgroundColor: 'var(--bg-panel)',
-              borderColor: 'var(--border-default)',
-            }}
-          >
-            <div className="flex items-center gap-2">
-              <span style={{ color: 'var(--fg-muted)' }}>solution.js</span>
-            </div>
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleRunTests}
-                disabled={isRunning || isSubmitting}
-                className="gap-2"
-              >
-                {isRunning ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Play className="h-4 w-4" />
-                )}
-                Run Tests
-              </Button>
-              <Button
-                size="sm"
-                onClick={handleSubmit}
-                disabled={isRunning || isSubmitting}
-                className="gap-2"
-              >
-                {isSubmitting ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Send className="h-4 w-4" />
-                )}
-                Submit
-              </Button>
-            </div>
-          </div>
-
-          {/* Code Editor */}
-          <div className="flex-1 flex overflow-hidden">
-            <div className="flex flex-1">
-              {/* Line Numbers */}
-              <div
-                className="px-3 py-4 font-mono select-none border-r"
-                style={{
-                  backgroundColor: 'var(--bg-sunken)',
-                  color: 'var(--fg-subtle)',
-                  borderColor: 'var(--border-default)',
-                }}
-              >
-                {Array.from({ length: lineNumbers }, (_, i) => (
-                  <div key={i} className="leading-6">
-                    {i + 1}
-                  </div>
-                ))}
-              </div>
-
-              {/* Code Area */}
-              <ScrollArea className="flex-1">
-                <textarea
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  className="w-full min-h-full px-4 py-4 leading-6 resize-none focus:outline-none font-mono"
-                  style={{
-                    backgroundColor: 'var(--bg-sunken)',
-                    color: 'var(--fg-default)',
-                    tabSize: 2,
-                  }}
-                  spellCheck={false}
-                />
-              </ScrollArea>
-            </div>
-          </div>
-
-          {/* Test Results */}
-          <AnimatePresence>
-            {testResults && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.3 }}
-                className="border-t overflow-hidden"
-                style={{
-                  borderColor: 'var(--border-default)',
-                  backgroundColor: 'var(--bg-panel)',
-                }}
-              >
-                <Tabs defaultValue="results" className="w-full">
-                  <TabsList
-                    className="w-full justify-start rounded-none border-b px-4"
-                    style={{ borderColor: 'var(--border-default)' }}
-                  >
-                    <TabsTrigger value="results">Test Results</TabsTrigger>
-                    <TabsTrigger value="console">Console</TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="results" className="m-0">
-                    <ScrollArea className="h-64">
-                      <div className="p-4 space-y-2">
-                        {testResults.map((result, idx) => (
-                          <motion.div
-                            key={result.test_id}
-                            initial={{ opacity: 0, x: -10 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: idx * 0.05 }}
-                            className="p-3 rounded-lg border"
-                            style={{
-                              backgroundColor:
-                                result.status === 'pass'
-                                  ? 'var(--success-soft)'
-                                  : 'var(--danger-soft)',
-                              borderColor:
-                                result.status === 'pass'
-                                  ? 'var(--success-600)'
-                                  : 'var(--danger-600)',
-                            }}
-                          >
-                            <div className="flex items-start justify-between gap-4">
-                              <div className="flex items-start gap-2 flex-1">
-                                {result.status === 'pass' ? (
-                                  <CheckCircle2
-                                    className="h-4 w-4 mt-0.5 flex-shrink-0"
-                                    style={{ color: 'var(--success-600)' }}
-                                  />
-                                ) : (
-                                  <XCircle
-                                    className="h-4 w-4 mt-0.5 flex-shrink-0"
-                                    style={{ color: 'var(--danger-600)' }}
-                                  />
-                                )}
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <span className="font-mono">Test {idx + 1}</span>
-                                    <span style={{ color: 'var(--fg-muted)' }}>•</span>
-                                    <span
-                                      style={{ color: 'var(--fg-muted)' }}
-                                      className="font-mono"
-                                    >
-                                      {result.time_ms}ms
-                                    </span>
-                                  </div>
-                                  {result.status === 'fail' && result.expected !== undefined && (
-                                    <div className="space-y-1 mt-2">
-                                      <div className="font-mono">
-                                        <span style={{ color: 'var(--fg-muted)' }}>Expected: </span>
-                                        <span style={{ color: 'var(--success-600)' }}>
-                                          {JSON.stringify(result.expected)}
-                                        </span>
-                                      </div>
-                                      <div className="font-mono">
-                                        <span style={{ color: 'var(--fg-muted)' }}>Got: </span>
-                                        <span style={{ color: 'var(--danger-600)' }}>
-                                          {JSON.stringify(result.actual)}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          </motion.div>
-                        ))}
-                      </div>
-                    </ScrollArea>
-                  </TabsContent>
-                  <TabsContent value="console" className="m-0">
-                    <ScrollArea className="h-64">
-                      <div className="p-4 font-mono" style={{ color: 'var(--fg-muted)' }}>
-                        {testResults.some((r) => r.stdout || r.stderr) ? (
-                          <div className="space-y-2">
-                            {testResults.map((result, idx) => (
-                              <div key={idx}>
-                                {result.stdout && <div>{result.stdout}</div>}
-                                {result.stderr && (
-                                  <div style={{ color: 'var(--danger-600)' }}>{result.stderr}</div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="text-center py-8">No console output</div>
-                        )}
-                      </div>
-                    </ScrollArea>
-                  </TabsContent>
-                </Tabs>
-              </motion.div>
-            )}
-          </AnimatePresence>
+        <div
+          className="flex min-h-0 w-1/2 flex-1 flex-col"
+          style={{ backgroundColor: 'var(--bg-sunken)' }}
+        >
+          <CodeEditorPanel
+            key={problem.problem.title}
+            value={code}
+            onChange={setCode}
+            fileName="solution.js"
+            language="javascript"
+            onRunTests={handleRunTests}
+            onSubmit={handleSubmit}
+            runLabel="Run public tests"
+            submitLabel="Submit"
+            className="flex-1 rounded-none border-0 shadow-none"
+            showPreview={sandboxConfig.showPreview}
+            showFileExplorer={sandboxConfig.showFileExplorer}
+            showSandpackConsole={sandboxConfig.showSandpackConsole}
+            sandpackOptions={sandboxConfig.sandpackOptions}
+          />
         </div>
       </main>
     </div>

@@ -1,23 +1,28 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import {
   Badge,
   Button,
+  CodeEditorPanel,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  SplitPane,
   Textarea,
   ThemeToggle,
   useToast,
+  type SubmitResult,
+  type TestResult as EditorTestResult,
 } from '@improview/ui';
 import { Sparkles, Loader2, BookMarked, LogOut, User as UserIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuthStore } from '../../state/authStore';
 import { getApiClient } from '../../lib/apiClient';
 import { getAuthService } from '../../lib/auth';
+import { useSaveProblem } from '../../lib/hooks';
 import {
   MacroCategory,
   Category,
@@ -28,11 +33,13 @@ import {
   Provider,
   ProblemPack,
   Attempt,
-  TestResult,
 } from '../../types/problem';
 import { ProblemPanel } from '../../components/ProblemPanel';
-import { EditorPanel } from '../../components/EditorPanel';
 import { Timer } from '../../components/Timer';
+import {
+  getSandboxConfigForCategory,
+  inferMacroCategoryFromProblem,
+} from '../../utils/sandboxConfig';
 
 const macroCategories: {
   value: MacroCategory;
@@ -85,6 +92,12 @@ const providers: { value: Provider; label: string }[] = [
   { value: 'grok', label: 'Grok 4 Fast' },
 ];
 
+const buildSolutionTemplate = (problem: ProblemPack) =>
+  `function ${problem.api.function_name}(${problem.api.params.map((p) => p.name).join(', ')}) {
+  // Your implementation here
+
+}`;
+
 export function HomePage() {
   const navigate = useNavigate();
   const { publish } = useToast();
@@ -98,12 +111,32 @@ export function HomePage() {
   const [customPrompt, setCustomPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [currentProblem, setCurrentProblem] = useState<ProblemPack | null>(null);
-  const [currentAttempt, setCurrentAttempt] = useState<Attempt | null>(null); // eslint-disable-line @typescript-eslint/no-unused-vars
+  const [currentAttempt, setCurrentAttempt] = useState<Attempt | null>(null);
   const [isNavHidden, setIsNavHidden] = useState(false);
   const [lastScrollY, setLastScrollY] = useState(0);
+  const [solutionCode, setSolutionCode] = useState('');
+
+  // Use React Query mutation for saving problems
+  const {
+    saveProblemAsync,
+    isSaving: isSavingProblem,
+    savedProblemId,
+    reset: resetSaveMutation,
+  } = useSaveProblem();
 
   const workspaceRef = useRef<HTMLDivElement>(null);
   const workspaceHeaderRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!currentProblem) {
+      setSolutionCode('');
+      resetSaveMutation();
+      return;
+    }
+
+    setSolutionCode(buildSolutionTemplate(currentProblem));
+    resetSaveMutation();
+  }, [currentProblem, resetSaveMutation]);
 
   // Scroll detection for nav bar hiding/showing
   useEffect(() => {
@@ -165,6 +198,16 @@ export function HomePage() {
       setSelectedCategory('scalability' as Category);
     }
   };
+
+  const activeMacroCategory = useMemo<MacroCategory>(
+    () => (currentProblem ? inferMacroCategoryFromProblem(currentProblem) : selectedMacroCategory),
+    [currentProblem, selectedMacroCategory],
+  );
+
+  const sandboxConfig = useMemo(
+    () => getSandboxConfigForCategory(activeMacroCategory),
+    [activeMacroCategory],
+  );
 
   const handleGenerate = async () => {
     setIsGenerating(true);
@@ -231,30 +274,28 @@ export function HomePage() {
   };
 
   // Mock test execution (same as in figma-make-reference)
-  const handleRunTests = async (code: string): Promise<TestResult[]> => {
+  const handleRunTests = async (code: string): Promise<EditorTestResult[]> => {
     await new Promise((resolve) => setTimeout(resolve, 1000));
     if (!currentProblem) return [];
 
     return currentProblem.tests.public.map((test, idx) => ({
-      test_id: `test_${idx}`,
+      id: `test_${idx}`,
       status: code.includes('return') ? 'pass' : 'fail',
-      time_ms: Math.floor(Math.random() * 50) + 5,
+      timeMs: Math.floor(Math.random() * 50) + 5,
       expected: test.output,
       actual: code.includes('return') ? test.output : null,
     }));
   };
 
-  const handleSubmit = async (
-    code: string,
-  ): Promise<{ passed: boolean; results: TestResult[] }> => {
+  const handleSubmit = async (code: string): Promise<SubmitResult> => {
     await new Promise((resolve) => setTimeout(resolve, 1500));
     if (!currentProblem) return { passed: false, results: [] };
 
     const allTests = [...currentProblem.tests.public, ...currentProblem.tests.hidden];
     const results = allTests.map((test, idx) => ({
-      test_id: `test_${idx}`,
+      id: `test_${idx}`,
       status: (code.includes('return') && Math.random() > 0.3 ? 'pass' : 'fail') as 'pass' | 'fail',
-      time_ms: Math.floor(Math.random() * 50) + 5,
+      timeMs: Math.floor(Math.random() * 50) + 5,
       expected: test.output,
       actual: code.includes('return') ? test.output : null,
     }));
@@ -263,6 +304,36 @@ export function HomePage() {
       passed: results.every((r) => r.status === 'pass'),
       results,
     };
+  };
+
+  const handleSaveProblem = async () => {
+    if (!currentProblem || !currentAttempt || isSavingProblem || savedProblemId) {
+      return;
+    }
+
+    try {
+      await saveProblemAsync({
+        problem_id: currentAttempt.problem_id,
+        title: currentProblem.problem.title,
+        language: currentAttempt.lang,
+        status: 'in_progress',
+        tags: [selectedCategory],
+        hint_unlocked: false,
+      });
+
+      publish({
+        title: 'Problem saved',
+        description: 'Find it later in your saved problems library.',
+        variant: 'success',
+      });
+    } catch (error) {
+      console.error('Failed to save problem:', error);
+      publish({
+        title: 'Save failed',
+        description: error instanceof Error ? error.message : 'An unknown error occurred',
+        variant: 'error',
+      });
+    }
   };
 
   const handleLogout = () => {
@@ -282,6 +353,8 @@ export function HomePage() {
     typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const displayName = user?.name ?? user?.username ?? 'Your account';
+  const isSaveDisabled =
+    !currentProblem || !currentAttempt || isSavingProblem || Boolean(savedProblemId);
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: 'var(--bg-default)' }}>
@@ -584,28 +657,111 @@ export function HomePage() {
                 </div>
                 <div className="flex items-center gap-3">
                   <Timer estimatedMinutes={currentProblem.time_estimate_minutes} autoStart />
-                  <Button variant="outline" size="sm" className="gap-2">
-                    <BookMarked className="h-4 w-4" />
-                    Save
-                  </Button>
+                  <motion.div
+                    animate={
+                      savedProblemId
+                        ? {
+                            scale: [1, 1.15, 1],
+                            rotate: [0, -5, 5, 0],
+                          }
+                        : {}
+                    }
+                    transition={{
+                      duration: 0.5,
+                      ease: 'easeInOut',
+                    }}
+                    whileTap={
+                      !isSaveDisabled
+                        ? {
+                            scale: 0.95,
+                            rotate: -3,
+                          }
+                        : {}
+                    }
+                  >
+                    <Button
+                      variant={savedProblemId ? 'primary' : 'outline'}
+                      size="sm"
+                      className="gap-2 relative overflow-hidden"
+                      onClick={handleSaveProblem}
+                      disabled={isSaveDisabled}
+                    >
+                      <AnimatePresence mode="wait">
+                        {isSavingProblem ? (
+                          <motion.div
+                            key="saving"
+                            initial={{ opacity: 0, rotate: -90 }}
+                            animate={{ opacity: 1, rotate: 0 }}
+                            exit={{ opacity: 0, rotate: 90 }}
+                            transition={{ duration: 0.2 }}
+                          >
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          </motion.div>
+                        ) : (
+                          <motion.div
+                            key="bookmark"
+                            initial={{ opacity: 0, scale: 0.5 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.5 }}
+                            transition={{ duration: 0.2 }}
+                          >
+                            <BookMarked className="h-4 w-4" />
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                      {savedProblemId ? 'Saved' : isSavingProblem ? 'Saving...' : 'Save'}
+                      {savedProblemId && (
+                        <motion.div
+                          className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
+                          initial={{ x: '-100%' }}
+                          animate={{ x: '100%' }}
+                          transition={{
+                            duration: 0.6,
+                            ease: 'easeInOut',
+                          }}
+                        />
+                      )}
+                    </Button>
+                  </motion.div>
                 </div>
               </div>
 
               {/* Problem + Editor Split */}
-              <div className="grid lg:grid-cols-2 h-[calc(100vh-120px)]">
-                <div className="border-r" style={{ borderColor: 'var(--border-default)' }}>
-                  <ProblemPanel problem={currentProblem} />
-                </div>
-                <div>
-                  <EditorPanel
-                    initialCode={`function ${currentProblem.api.function_name}(${currentProblem.api.params.map((p) => p.name).join(', ')}) {
-  // Your implementation here
-
-}`}
-                    onRunTests={handleRunTests}
-                    onSubmit={handleSubmit}
-                  />
-                </div>
+              <div className="h-[calc(100vh-120px)]">
+                <SplitPane
+                  className="h-full"
+                  minLeft={360}
+                  minRight={360}
+                  initialFraction={0.5}
+                  left={
+                    <div
+                      className="h-full border-r bg-[var(--bg-sunken)]"
+                      style={{ borderColor: 'var(--border-default)' }}
+                    >
+                      <ProblemPanel problem={currentProblem} />
+                    </div>
+                  }
+                  right={
+                    <div className="flex min-h-0 h-full flex-1 flex-col bg-[var(--bg-sunken)]">
+                      <CodeEditorPanel
+                        key={currentProblem.problem.title}
+                        value={solutionCode}
+                        onChange={setSolutionCode}
+                        fileName="solution.js"
+                        language="javascript"
+                        onRunTests={handleRunTests}
+                        onSubmit={handleSubmit}
+                        runLabel="Run Tests"
+                        submitLabel="Submit"
+                        className="flex-1 rounded-none border-0 shadow-none"
+                        showPreview={sandboxConfig.showPreview}
+                        showFileExplorer={sandboxConfig.showFileExplorer}
+                        showSandpackConsole={sandboxConfig.showSandpackConsole}
+                        sandpackOptions={sandboxConfig.sandpackOptions}
+                      />
+                    </div>
+                  }
+                />
               </div>
             </div>
           </motion.section>

@@ -4,6 +4,8 @@ import {
     GenerateResponse,
     CreateAttemptRequest,
     CreateAttemptResponse,
+    CreateSavedProblemRequest,
+    CreateSavedProblemResponse,
     RunTestsRequest,
     RunTestsResponse,
     SubmitRequest,
@@ -11,6 +13,7 @@ import {
     AttemptWithRuns,
     GenerateResponseSchema,
     CreateAttemptResponseSchema,
+    CreateSavedProblemResponseSchema,
     RunTestsResponseSchema,
     SubmitResponseSchema,
     AttemptWithRunsSchema,
@@ -85,5 +88,49 @@ export class RestClient {
     public async version(): Promise<{ version: string }> {
         return this.apiService.get<{ version: string }>('/api/version');
     }
-}
 
+    /**
+     * Get test runs for an attempt (for database sync)
+     */
+    public async getTestRuns(attemptId: string): Promise<{ runs: any[] }> {
+        return this.apiService.get<{ runs: any[] }>(`/api/test-runs/${attemptId}`);
+    }
+
+    /**
+     * Get saved problems for the authenticated user
+     */
+    public async getSavedProblems(params?: { status?: string; limit?: number }): Promise<{ saved_problems: any[] }> {
+        const queryParams = params ? `?${new URLSearchParams(params as any)}` : '';
+        return this.apiService.get<{ saved_problems: any[] }>(`/api/user/saved-problems${queryParams}`);
+    }
+
+    /**
+     * Create a saved problem
+     */
+    public async createSavedProblem(request: CreateSavedProblemRequest): Promise<CreateSavedProblemResponse> {
+        const response = await this.apiService.post<unknown>('/api/user/saved-problems', request);
+        return CreateSavedProblemResponseSchema.parse(response);
+    }
+
+    /**
+     * Get attempts for a saved problem
+     */
+    public async getSavedProblemAttempts(savedProblemId: string): Promise<{ attempts: any[] }> {
+        return this.apiService.get<{ attempts: any[] }>(`/api/user/saved-problems/${savedProblemId}/attempts`);
+    }
+
+    /**
+     * Create an attempt snapshot for a saved problem
+     */
+    public async createSavedProblemAttempt(savedProblemId: string, attemptData: {
+        attempt_id: string;
+        code: string;
+        status: 'draft' | 'submitted';
+        pass_count: number;
+        fail_count: number;
+        runtime_ms: number;
+        submitted_at?: number;
+    }): Promise<{ attempt: any }> {
+        return this.apiService.post<{ attempt: any }>(`/api/user/saved-problems/${savedProblemId}/attempts`, attemptData);
+    }
+}

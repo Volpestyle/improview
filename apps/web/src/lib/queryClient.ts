@@ -28,10 +28,19 @@ export const queryKeys = {
     runs: (attemptId: string) => ['runs', attemptId] as const,
     attemptResults: (id: string) => ['attempt', id, 'results'] as const,
 
+    // Test run history keys
+    testRuns: (attemptId: string) => ['test-runs', attemptId] as const,
+    testRun: (attemptId: string, runId: string) => ['test-runs', attemptId, runId] as const,
+    testRunsInfinite: (attemptId: string) => ['test-runs-infinite', attemptId] as const,
+
     // Submission keys
     submission: (attemptId: string) => ['submission', attemptId] as const,
 
     // History keys
     history: () => ['history'] as const,
     historyAttempt: (id: string) => ['history', 'attempt', id] as const,
+
+    // Saved problems keys
+    savedProblems: () => ['saved-problems'] as const,
+    savedProblem: (id: string) => ['saved-problem', id] as const,
 } as const;

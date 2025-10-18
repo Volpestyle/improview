@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { User } from '../types/user';
+import { getAuthService } from '../lib/auth';
 
 /**
  * Authentication status types
@@ -124,10 +125,8 @@ export const useAuthStore = create<AuthState>()(
                     return;
                 }
 
-                // Import auth service dynamically to avoid circular dependency
                 refreshPromise = (async () => {
                     try {
-                        const { getAuthService } = await import('../lib/auth');
                         const authService = getAuthService();
 
                         const response = await authService.refreshToken(state.refreshToken!);
