@@ -31,7 +31,7 @@ Non‑goals (initial): discussion forums, company‑specific problem sets, multi
 	•	Example solutions: collapsed accordion (don’t show by default).
 	•	Result sheet: pass/fail, runtime/ops count (if measured), test breakdown, diff on expected vs actual for failed cases.
 	•	History: local+cloud session history (problem, code, results, time spent).
-	•	Authentication: Passwordless (Passkeys via WebAuthn) + magic links fallback; offer “Continue with Google” via Cognito when the Google IdP is configured.
+	•	Authentication: Google Sign-In via Amazon Cognito (federated IdP) using a custom PKCE flow; the SPA exchanges codes with Cognito directly and stores the resulting JWT—no bespoke backend auth endpoints.
 	•	Them­ing & Fonts:
 	•	UI: Geist (sans).
 	•	Code: Cursor IDE font if provided (custom load); fallback JetBrains Mono → Fira Code.
@@ -55,7 +55,7 @@ Principles: Fully AWS‑native, serverless/edge‑accelerated, minimal latency, 
   ├─ React SPA (Vite) + TanStack Router
   ├─ Monaco/CodeMirror + Vim
   ├─ Framer Motion UI
-  └─ Cognito (Passkeys + magic link via SES)
+  └─ Cognito (Google IdP, custom OAuth flow without hosted UI)
       │
       ▼
 [Amazon CloudFront]
@@ -81,7 +81,7 @@ Note: Lambdas are not placed in a VPC (so they have outbound internet for OpenAI
 	•	Frontend hosting: S3 + CloudFront, OAC, gzip/brotli, long‑TTL immutable assets.
 	•	Compute: AWS Lambda (Go 1.x), Provisioned Concurrency for hot paths (/generate, /run-tests) at small baseline.
 	•	API: API Gateway HTTP API (lower latency/cost than REST), JWT authorizer with Cognito.
-	•	Auth: Amazon Cognito User Pools with Passkeys (WebAuthn); magic link via Amazon SES (Lambda signer).
+	•	Auth: Amazon Cognito User Pool federated with Google; custom login UI hits Cognito OAuth endpoints (auth code + PKCE) and persists tokens client-side.
 	•	Data: DynamoDB (single‑table design) + DAX optional; S3 for artifacts; optional OpenSearch Serverless for analytics later.
 	•	Timers/state: Client timer + server truth in DynamoDB; optional EventBridge Scheduler for long‑running expirations/cleanup.
 	•	Queues/Async: EventBridge + Lambda destinations (e.g., post‑submission grading fan‑out if needed).
@@ -105,7 +105,7 @@ GSI1 for user → attempts by created_at desc; GSI2 for category+difficulty → 
 4) Data Model
 
 Tables (Postgres/Neon or D1):
-	•	user(id, email, passkey_pubkey, created_at)
+	•	user(id, email, cognito_sub, created_at)
 	•	session(id, user_id, created_at, expires_at)
 	•	problem(id, category, difficulty, prompt_hash, provider, json, created_by, created_at)
 	•	attempt(id, user_id, problem_id, lang, code, started_at, ended_at, hint_used, pass_count, fail_count, duration_ms)
@@ -185,9 +185,7 @@ export const ProblemPack = z.object({
 6) API Design (Go HTTP Lambdas)
 
 Auth
-	•	POST /api/auth/start → begin magic link or passkey registration
-	•	POST /api/auth/callback → finalize login; set HttpOnly cookie
-	•	POST /api/auth/logout
+	•	Handled via Cognito OAuth (Google IdP). SPA performs the code + PKCE exchange directly; backend only requires the `Authorization: Bearer <jwt>` header on protected routes.
 
 Problems
 	•	POST /api/generate {category, difficulty, customPrompt?, provider} → ProblemPack
@@ -200,8 +198,8 @@ Runs/Attempts
 	•	GET /api/attempt/:id → summary + history
 
 Hints/Solutions
-	•	POST /api/hint {attempt_id} → reveal + record usage
-	•	GET /api/solutions/:problem_id → collapsed content unless explicit expand
+	•	Hints ship with the problem pack; the client tracks reveal state locally and includes `hint_used` when persisting attempt state.
+	•	Solutions live in the same payload; keep them collapsed in the UI until the user opts in (no additional API round-trip).
 
 Health/Observability
 	•	GET /api/healthz
@@ -265,7 +263,7 @@ Milestone 0 — Foundations (Week 1)
 	•	CDK bootstrap; S3 bucket (private) + CloudFront OAC; basic SPA routing function.
 
 Milestone 1 — Auth & LLM (Week 2)
-	•	Cognito User Pool with Passkeys; SES domain verified; magic‑link Lambda.
+	•	Cognito User Pool federated with Google; implement custom Google sign-in button that drives Cognito’s auth code + PKCE endpoints.
 	•	Secrets Manager for provider keys.
 	•	Provider Broker Lambda (/generate) with OpenAI first; DynamoDB table (single‑table) + Zod schema validation.
 

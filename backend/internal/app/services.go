@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -244,13 +245,26 @@ func newServices(clock api.Clock, options ServicesOptions) (api.Services, error)
 	runner := SimpleTestRunner{}
 	submission := SubmissionService{Runner: runner, Attempts: attempts}
 
+	var profiles api.UserProfileStore
+	var savedProblems api.SavedProblemStore
+	if tableName := strings.TrimSpace(os.Getenv("TABLE_NAME")); tableName != "" {
+		store, err := NewDynamoUserDataStoreFromEnv(context.Background(), tableName, strings.TrimSpace(os.Getenv("TABLE_INDEX_ATTEMPT_LOOKUP")), strings.TrimSpace(os.Getenv("TABLE_INDEX_USER_ACTIVITY")))
+		if err != nil {
+			return api.Services{}, err
+		}
+		profiles = store
+		savedProblems = store
+	}
+
 	return api.Services{
-		Generator:  generator,
-		Problems:   problems,
-		Attempts:   attempts,
-		Tests:      runner,
-		Submission: submission,
-		Health:     nil,
-		Clock:      clock,
+		Generator:     generator,
+		Problems:      problems,
+		Attempts:      attempts,
+		Profiles:      profiles,
+		SavedProblems: savedProblems,
+		Tests:         runner,
+		Submission:    submission,
+		Health:        nil,
+		Clock:         clock,
 	}, nil
 }

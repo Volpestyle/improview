@@ -44,6 +44,13 @@ export class BackendStack extends Stack {
       projectionType: dynamodb.ProjectionType.ALL,
     });
 
+    mainTable.addGlobalSecondaryIndex({
+      indexName: 'gsi2',
+      partitionKey: { name: 'gsi2pk', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'gsi2sk', type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
     const artifactsBucket = new s3.Bucket(this, 'ArtifactsBucket', {
       encryption: s3.BucketEncryption.S3_MANAGED,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
@@ -65,6 +72,8 @@ export class BackendStack extends Stack {
         PROVIDER_SECRET_ARN: props.providerSecret?.secretArn ?? '',
         USER_POOL_ID: props.userPool?.userPoolId ?? '',
         USER_POOL_CLIENT_ID: props.userPoolClient?.userPoolClientId ?? '',
+        TABLE_INDEX_ATTEMPT_LOOKUP: 'gsi1',
+        TABLE_INDEX_USER_ACTIVITY: 'gsi2',
       },
       code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', '..', 'backend'), {
         bundling: {
@@ -140,6 +149,16 @@ export class BackendStack extends Stack {
     new CfnOutput(this, 'DynamoTableName', {
       value: mainTable.tableName,
       description: 'Primary DynamoDB table backing Improview state',
+    });
+
+    new CfnOutput(this, 'AttemptLookupIndexName', {
+      value: 'gsi1',
+      description: 'DynamoDB GSI for natural attempt lookups',
+    });
+
+    new CfnOutput(this, 'UserActivityIndexName', {
+      value: 'gsi2',
+      description: 'DynamoDB GSI for user scoped saved-problem activity feeds',
     });
 
     new CfnOutput(this, 'ArtifactsBucketName', {

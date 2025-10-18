@@ -27,6 +27,23 @@ type AttemptStore interface {
 	Complete(ctx context.Context, attemptID string, summary domain.SubmissionSummary) error
 }
 
+// UserProfileStore manages user profile persistence.
+type UserProfileStore interface {
+	GetProfile(ctx context.Context, userID string) (domain.UserProfile, error)
+	UpsertProfile(ctx context.Context, userID string, update domain.UserProfileUpdate, now time.Time) (domain.UserProfile, error)
+}
+
+// SavedProblemStore persists saved problem metadata and attempt snapshots.
+type SavedProblemStore interface {
+	ListSavedProblems(ctx context.Context, userID string, opts domain.SavedProblemListOptions) (domain.SavedProblemListResult, error)
+	CreateSavedProblem(ctx context.Context, userID string, input domain.SavedProblemCreateInput, now time.Time) (domain.SavedProblemSummary, error)
+	GetSavedProblem(ctx context.Context, userID, savedProblemID string) (domain.SavedProblemDetail, error)
+	UpdateSavedProblem(ctx context.Context, userID, savedProblemID string, input domain.SavedProblemUpdateInput, now time.Time) (domain.SavedProblemSummary, error)
+	DeleteSavedProblem(ctx context.Context, userID, savedProblemID string) error
+	AppendAttempt(ctx context.Context, userID, savedProblemID string, input domain.SavedProblemAttemptInput, now time.Time) (domain.SavedAttemptSnapshot, error)
+	ListAttempts(ctx context.Context, userID, savedProblemID string) ([]domain.SavedAttemptSnapshot, error)
+}
+
 // TestRunner executes user code against public or hidden tests.
 type TestRunner interface {
 	Run(ctx context.Context, req RunTestsRequest) (domain.RunSummary, error)
@@ -52,6 +69,8 @@ type Services struct {
 	Generator     ProblemGenerator
 	Problems      ProblemRepository
 	Attempts      AttemptStore
+	Profiles      UserProfileStore
+	SavedProblems SavedProblemStore
 	Tests         TestRunner
 	Submission    SubmissionEvaluator
 	Health        HealthReporter

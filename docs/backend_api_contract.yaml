@@ -165,6 +165,164 @@ paths:
                   - version
         default:
           $ref: '#/components/responses/ErrorResponse'
+  /api/user/profile:
+    get:
+      summary: Get authenticated user profile
+      responses:
+        '200':
+          description: User profile payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+    put:
+      summary: Upsert authenticated user profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserProfileRequest'
+      responses:
+        '200':
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+  /api/user/saved-problems:
+    get:
+      summary: List saved problems for the authenticated user
+      parameters:
+        - name: status
+          in: query
+          description: Optional status filter
+          schema:
+            type: string
+            enum:
+              - in_progress
+              - completed
+              - archived
+        - name: limit
+          in: query
+          description: Maximum number of items to return (default 50, max 200)
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            maximum: 200
+        - name: next_token
+          in: query
+          description: Pagination cursor returned from a previous call
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Saved problem collection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedProblemListResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+    post:
+      summary: Save a problem for the authenticated user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSavedProblemRequest'
+      responses:
+        '200':
+          description: Saved problem created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedProblemResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+  /api/user/saved-problems/{saved_problem_id}:
+    parameters:
+      - name: saved_problem_id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Retrieve a saved problem with attempts
+      responses:
+        '200':
+          description: Full saved problem detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedProblemDetailResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+    put:
+      summary: Update saved problem metadata
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSavedProblemRequest'
+      responses:
+        '200':
+          description: Updated saved problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedProblemResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+    delete:
+      summary: Remove a saved problem
+      responses:
+        '204':
+          description: Saved problem deleted
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+  /api/user/saved-problems/{saved_problem_id}/attempts:
+    parameters:
+      - name: saved_problem_id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: List attempts persisted for a saved problem
+      responses:
+        '200':
+          description: Attempt collection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedProblemAttemptsResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+    post:
+      summary: Append an attempt snapshot to a saved problem
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSavedProblemAttemptRequest'
+      responses:
+        '200':
+          description: Attempt persisted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedProblemAttemptResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
 components:
   schemas:
     GenerateRequest:
@@ -480,6 +638,276 @@ components:
         - runtime_ms
         - operations
         - hidden_results
+    UserProfile:
+      type: object
+      properties:
+        user_id:
+          type: string
+        handle:
+          type: string
+        display_name:
+          type: string
+        bio:
+          type: string
+        avatar_url:
+          type: string
+          format: uri
+        timezone:
+          type: string
+        preferences:
+          type: object
+          additionalProperties:
+            type: string
+        created_at:
+          type: integer
+          format: int64
+        updated_at:
+          type: integer
+          format: int64
+      required:
+        - user_id
+        - created_at
+        - updated_at
+    UserProfileResponse:
+      type: object
+      properties:
+        profile:
+          $ref: '#/components/schemas/UserProfile'
+      required:
+        - profile
+    UpdateUserProfileRequest:
+      type: object
+      properties:
+        handle:
+          type: string
+        display_name:
+          type: string
+        bio:
+          type: string
+        avatar_url:
+          type: string
+          format: uri
+        timezone:
+          type: string
+        preferences:
+          type: object
+          additionalProperties:
+            type: string
+      additionalProperties: false
+    SavedProblemSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        problem_id:
+          type: string
+        title:
+          type: string
+        language:
+          type: string
+        status:
+          type: string
+          enum:
+            - in_progress
+            - completed
+            - archived
+        tags:
+          type: array
+          items:
+            type: string
+        notes:
+          type: string
+        hint_unlocked:
+          type: boolean
+        created_at:
+          type: integer
+          format: int64
+        updated_at:
+          type: integer
+          format: int64
+        last_attempt:
+          $ref: '#/components/schemas/AttemptSnapshot'
+      required:
+        - id
+        - problem_id
+        - language
+        - status
+        - created_at
+        - updated_at
+    SavedProblemDetail:
+      allOf:
+        - $ref: '#/components/schemas/SavedProblemSummary'
+        - type: object
+          properties:
+            attempts:
+              type: array
+              items:
+                $ref: '#/components/schemas/AttemptSnapshot'
+          required:
+            - attempts
+    SavedProblemResponse:
+      type: object
+      properties:
+        saved_problem:
+          $ref: '#/components/schemas/SavedProblemSummary'
+      required:
+        - saved_problem
+    SavedProblemDetailResponse:
+      type: object
+      properties:
+        saved_problem:
+          $ref: '#/components/schemas/SavedProblemDetail'
+      required:
+        - saved_problem
+    SavedProblemListResponse:
+      type: object
+      properties:
+        saved_problems:
+          type: array
+          items:
+            $ref: '#/components/schemas/SavedProblemSummary'
+        next_token:
+          type: string
+          nullable: true
+      required:
+        - saved_problems
+    AttemptSummary:
+      type: object
+      properties:
+        attempt_id:
+          type: string
+        status:
+          type: string
+          enum:
+            - submitted
+            - passed
+            - failed
+        updated_at:
+          type: integer
+          format: int64
+        pass_count:
+          type: integer
+          format: int32
+        fail_count:
+          type: integer
+          format: int32
+      required:
+        - attempt_id
+        - status
+        - updated_at
+    AttemptSnapshot:
+      allOf:
+        - $ref: '#/components/schemas/AttemptSummary'
+        - type: object
+          properties:
+            submitted_at:
+              type: integer
+              format: int64
+              nullable: true
+            runtime_ms:
+              type: integer
+              format: int64
+            code:
+              type: string
+            code_s3_key:
+              type: string
+          required:
+            - runtime_ms
+            - code
+    SavedProblemAttemptsResponse:
+      type: object
+      properties:
+        attempts:
+          type: array
+          items:
+            $ref: '#/components/schemas/AttemptSnapshot'
+      required:
+        - attempts
+    SavedProblemAttemptResponse:
+      type: object
+      properties:
+        attempt:
+          $ref: '#/components/schemas/AttemptSnapshot'
+      required:
+        - attempt
+    CreateSavedProblemRequest:
+      type: object
+      properties:
+        problem_id:
+          type: string
+        title:
+          type: string
+        language:
+          type: string
+        status:
+          type: string
+          enum:
+            - in_progress
+            - completed
+            - archived
+        tags:
+          type: array
+          items:
+            type: string
+        notes:
+          type: string
+        hint_unlocked:
+          type: boolean
+      required:
+        - problem_id
+        - language
+      additionalProperties: false
+    UpdateSavedProblemRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+            - in_progress
+            - completed
+            - archived
+        tags:
+          type: array
+          items:
+            type: string
+        notes:
+          type: string
+        hint_unlocked:
+          type: boolean
+      additionalProperties: false
+    CreateSavedProblemAttemptRequest:
+      type: object
+      properties:
+        attempt_id:
+          type: string
+        code:
+          type: string
+        status:
+          type: string
+          enum:
+            - submitted
+            - passed
+            - failed
+        pass_count:
+          type: integer
+          format: int32
+        fail_count:
+          type: integer
+          format: int32
+        runtime_ms:
+          type: integer
+          format: int64
+        submitted_at:
+          type: integer
+          format: int64
+          nullable: true
+        code_s3_key:
+          type: string
+      required:
+        - attempt_id
+        - code
+        - status
+      additionalProperties: false
     ErrorResponse:
       type: object
       properties:

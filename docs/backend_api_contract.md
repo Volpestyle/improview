@@ -256,6 +256,275 @@ Report the backend version string.
 { "version": "v0.1.0" }
 ```
 
+### GET /api/user/profile
+
+Fetch the authenticated user's profile.
+
+**Response body**
+```json
+{
+  "profile": {
+    "user_id": "user_123",
+    "handle": "jvolpe",
+    "display_name": "James Volpe",
+    "bio": "Product engineer by day.",
+    "avatar_url": "https://cdn.example.com/avatars/jvolpe.png",
+    "timezone": "America/New_York",
+    "preferences": {
+      "editor.theme": "dark",
+      "language.default": "typescript"
+    },
+    "created_at": 1711046400,
+    "updated_at": 1711047300
+  }
+}
+```
+
+### PUT /api/user/profile
+
+Create or update the authenticated user's profile. Empty or missing fields leave existing values unchanged.
+
+**Request body**
+```json
+{
+  "handle": "jvolpe",
+  "display_name": "James Volpe",
+  "bio": "Product engineer by day.",
+  "avatar_url": "https://cdn.example.com/avatars/jvolpe.png",
+  "timezone": "America/New_York",
+  "preferences": {
+    "editor.theme": "dark",
+    "language.default": "typescript"
+  }
+}
+```
+
+**Response body**
+```json
+{
+  "profile": {
+    "user_id": "user_123",
+    "handle": "jvolpe",
+    "display_name": "James Volpe",
+    "bio": "Product engineer by day.",
+    "avatar_url": "https://cdn.example.com/avatars/jvolpe.png",
+    "timezone": "America/New_York",
+    "preferences": {
+      "editor.theme": "dark",
+      "language.default": "typescript"
+    },
+    "created_at": 1711046400,
+    "updated_at": 1711047400
+  }
+}
+```
+
+### GET /api/user/saved-problems
+
+List saved problems for the authenticated user. Supports optional query params: `status` (`in_progress`, `completed`, `archived`) and `limit` (defaults to 50, max 200).
+
+**Response body**
+```json
+{
+  "saved_problems": [
+    {
+      "id": "usp_456",
+      "problem_id": "prob_123",
+      "title": "Two Sum",
+      "language": "typescript",
+      "status": "in_progress",
+      "tags": ["arrays", "two-pointer"],
+      "notes": "Revisit the two-pointer variant.",
+      "created_at": 1711046400,
+      "updated_at": 1711047300
+    }
+  ],
+  "next_token": null
+}
+```
+
+### POST /api/user/saved-problems
+
+Persist a problem to the user's library.
+
+**Request body**
+```json
+{
+  "problem_id": "prob_123",
+  "title": "Two Sum",
+  "language": "typescript",
+  "status": "in_progress",
+  "tags": ["arrays", "two-pointer"],
+  "notes": "Revisit the two-pointer variant.",
+  "hint_unlocked": false
+}
+```
+
+**Response body**
+```json
+{
+  "saved_problem": {
+    "id": "usp_456",
+    "problem_id": "prob_123",
+    "title": "Two Sum",
+    "language": "typescript",
+    "status": "in_progress",
+    "tags": ["arrays", "two-pointer"],
+    "notes": "Revisit the two-pointer variant.",
+    "hint_unlocked": false,
+    "created_at": 1711046400,
+    "updated_at": 1711046400
+  }
+}
+```
+
+### GET /api/user/saved-problems/{saved_problem_id}
+
+Fetch full metadata for a saved problem, including attempt history.
+
+**Response body**
+```json
+{
+  "saved_problem": {
+    "id": "usp_456",
+    "problem_id": "prob_123",
+    "title": "Two Sum",
+    "language": "typescript",
+    "status": "in_progress",
+    "tags": ["arrays", "two-pointer"],
+    "notes": "Revisit the two-pointer variant.",
+    "hint_unlocked": true,
+    "created_at": 1711046400,
+    "updated_at": 1711047600,
+    "attempts": [
+      {
+        "attempt_id": "att_999",
+        "status": "passed",
+        "submitted_at": 1711047500,
+        "pass_count": 8,
+        "fail_count": 0,
+        "runtime_ms": 127,
+        "code": "function solve(nums, target) {\n  return [0, 1];\n}"
+      },
+      {
+        "attempt_id": "att_998",
+        "status": "failed",
+        "submitted_at": 1711047200,
+        "pass_count": 5,
+        "fail_count": 3,
+        "runtime_ms": 180,
+        "code": "function solve(nums, target) {\n  return [];\n}"
+      }
+    ]
+  }
+}
+```
+
+### PUT /api/user/saved-problems/{saved_problem_id}
+
+Update saved problem metadata (notes, tags, status, or whether hints are unlocked).
+
+**Request body**
+```json
+{
+  "status": "completed",
+  "tags": ["arrays", "two-pointer", "practice"],
+  "notes": "Shipped submission on 2024-03-22.",
+  "hint_unlocked": true
+}
+```
+
+**Response body**
+```json
+{
+  "saved_problem": {
+    "id": "usp_456",
+    "problem_id": "prob_123",
+    "title": "Two Sum",
+    "language": "typescript",
+    "status": "completed",
+    "tags": ["arrays", "two-pointer", "practice"],
+    "notes": "Shipped submission on 2024-03-22.",
+    "hint_unlocked": true,
+    "created_at": 1711046400,
+    "updated_at": 1711132800,
+    "last_attempt": {
+      "attempt_id": "att_999",
+      "status": "passed",
+      "updated_at": 1711047500,
+      "pass_count": 8,
+      "fail_count": 0
+    }
+  }
+}
+```
+
+### DELETE /api/user/saved-problems/{saved_problem_id}
+
+Remove a problem from the user's saved list. Returns `204 No Content` on success.
+
+### POST /api/user/saved-problems/{saved_problem_id}/attempts
+
+Append a new attempt snapshot (including source code) to a saved problem.
+
+**Request body**
+```json
+{
+  "attempt_id": "att_1001",
+  "code": "function solve(nums, target) {\n  return [1, 2];\n}",
+  "status": "submitted",
+  "pass_count": 7,
+  "fail_count": 1,
+  "runtime_ms": 143,
+  "submitted_at": 1711132000
+}
+```
+
+**Response body**
+```json
+{
+  "attempt": {
+    "attempt_id": "att_1001",
+    "status": "submitted",
+    "submitted_at": 1711132000,
+    "pass_count": 7,
+    "fail_count": 1,
+    "runtime_ms": 143,
+    "code": "function solve(nums, target) {\n  return [1, 2];\n}"
+  }
+}
+```
+
+### GET /api/user/saved-problems/{saved_problem_id}/attempts
+
+List attempt snapshots for a saved problem (ordered newest first).
+
+**Response body**
+```json
+{
+  "attempts": [
+    {
+      "attempt_id": "att_1001",
+      "status": "passed",
+      "submitted_at": 1711132000,
+      "pass_count": 7,
+      "fail_count": 1,
+      "runtime_ms": 143,
+      "code": "function solve(nums, target) {\n  return [1, 2];\n}"
+    },
+    {
+      "attempt_id": "att_999",
+      "status": "failed",
+      "submitted_at": 1711130000,
+      "pass_count": 3,
+      "fail_count": 5,
+      "runtime_ms": 180,
+      "code": "function solve(nums, target) {\n  return [0, 0];\n}"
+    }
+  ]
+}
+```
+
 ## Notes
 
 - `POST` endpoints may return `501 Not Implemented` when the corresponding
@@ -263,6 +532,20 @@ Report the backend version string.
 - Timestamps are expressed as Unix seconds where applicable.
 - Large string fields (e.g. `statement`, `code`) are free-form text and may
   contain newlines.
+
+## DynamoDB Data Model for Profiles and Saved Problems
+
+- Table: `improview-${ENV}-main` (shared single-table design).
+- Partition key (`pk`) and sort key (`sk`) encode entity types:
+  - User profile: `pk = USER#<user_id>`, `sk = PROFILE`.
+  - Saved problem metadata: `pk = USER#<user_id>`, `sk = SAVED#<saved_problem_id>`.
+  - Saved problem attempt snapshot: `pk = SAVED#<saved_problem_id>`, `sk = ATTEMPT#<iso8601_ts>#<attempt_id>`.
+- Global secondary indexes provide alternative lookups:
+  - `gsi1` maps natural identifiers (`gsi1pk = ATTEMPT#<attempt_id>` or `gsi1pk = PROBLEM#<problem_id>#USER#<user_id>`) to their parent `saved_problem_id`.
+  - `gsi2` (added in this revision) maps the user to attempt/activity feed (`gsi2pk = USER#<user_id>#ATTEMPT`, `gsi2sk = <iso8601_ts>#<saved_problem_id>#<attempt_id>`).
+- Saved problem attempts retain source code directly when the payload stays under the 400 KB DynamoDB item limit; larger submissions are uploaded to S3 (`ARTIFACT_BUCKET`) and referenced via `code_s3_key`.
+- All items carry `created_at` and `updated_at` Unix millisecond timestamps to support ordering and optimistic concurrency checks.
+- Only final submissions are recorded; interim “run tests” executions remain in-memory on the client.
 
 ## Live Integration Tests
 
