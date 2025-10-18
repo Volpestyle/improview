@@ -161,6 +161,8 @@ export const useTheme = () => {
   return context;
 };
 
+export const useThemeContext = () => useContext(ThemeContext);
+
 interface ThemeScriptProps {
   storageKey?: string;
   defaultTheme?: ThemePreference;

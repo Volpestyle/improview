@@ -26,7 +26,7 @@ import type {
   SandpackTheme,
   SandpackThemeProp,
 } from '@codesandbox/sandpack-react';
-import { useTheme } from '../../theme/ThemeProvider';
+import { useThemeContext } from '../../theme/ThemeProvider';
 import type { DesignTokens, ThemeMode } from '../../theme/types';
 import defaultTokensJson from '../../theme/tokens.json';
 import { Button } from '../button';
@@ -451,13 +451,7 @@ export const CodeEditorPanel = ({
     [defaultSandbox, sandpackFilesProp, mainFilePath, initialCode],
   );
 
-  let themeContext: ReturnType<typeof useTheme> | null = null;
-  try {
-    themeContext = useTheme();
-  } catch {
-    themeContext = null;
-  }
-
+  const themeContext = useThemeContext();
   const activeTokens = themeContext?.tokens ?? FALLBACK_TOKENS;
   const activeMode: ThemeMode = themeContext?.resolvedTheme ?? 'light';
 
