@@ -41,6 +41,7 @@ export const queryKeys = {
     historyAttempt: (id: string) => ['history', 'attempt', id] as const,
 
     // Saved problems keys
-    savedProblems: () => ['saved-problems'] as const,
-    savedProblem: (id: string) => ['saved-problem', id] as const,
+    savedProblems: (status?: string) => ['saved-problems', status ?? 'all'] as const,
+    savedProblemDetail: (id: string) => ['saved-problems', id, 'detail'] as const,
+    savedProblemAttempts: (id: string) => ['saved-problems', id, 'attempts'] as const,
 } as const;

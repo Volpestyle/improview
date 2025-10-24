@@ -63,6 +63,7 @@ var problemPackJSONSchema = map[string]any{
 		"hint",
 		"solutions",
 		"tests",
+		"macro_category",
 	},
 	"properties": map[string]any{
 		"problem": map[string]any{
@@ -184,9 +185,60 @@ var problemPackJSONSchema = map[string]any{
 				},
 			},
 		},
+		"macro_category": map[string]any{
+			"type": "string",
+			"enum": []string{"dsa", "frontend", "system-design"},
+		},
+		"workspace_template": map[string]any{
+			"type":                 "object",
+			"additionalProperties": false,
+			"required": []string{
+				"entry",
+				"files",
+			},
+			"properties": map[string]any{
+				"entry": map[string]any{
+					"type": "string",
+				},
+				"files": map[string]any{
+					"type": "object",
+					"patternProperties": map[string]any{
+						"^.+$": map[string]any{"$ref": "#/$defs/workspace_file"},
+					},
+					"minProperties": 1,
+				},
+				"dependencies": map[string]any{
+					"type": "object",
+					"patternProperties": map[string]any{
+						"^.+$": map[string]any{"type": "string"},
+					},
+				},
+				"dev_dependencies": map[string]any{
+					"type": "object",
+					"patternProperties": map[string]any{
+						"^.+$": map[string]any{"type": "string"},
+					},
+				},
+				"template": map[string]any{
+					"type": "string",
+				},
+				"environment": map[string]any{
+					"type": "string",
+				},
+			},
+		},
 	},
 	"$defs": map[string]any{
 		"json_value": jsonValueSchema,
+		"workspace_file": map[string]any{
+			"type":                 "object",
+			"additionalProperties": false,
+			"required": []string{"code"},
+			"properties": map[string]any{
+				"code": map[string]any{"type": "string"},
+				"hidden": map[string]any{"type": "boolean"},
+			},
+		},
 	},
 }
 
@@ -287,8 +339,28 @@ func (g *LLMProblemGenerator) Generate(ctx context.Context, req api.GenerateRequ
 		ResponseFormat: newProblemPackResponseFormat(),
 		Temperature:    g.temperature,
 		Messages: []chatMessage{
-			{Role: "system", Content: g.systemPrompt(category, difficulty, provider)},
-			{Role: "user", Content: g.userPrompt(category, difficulty, req.CustomPrompt, req.Provider, provider)},
+			{
+				Role: "system",
+				Content: g.systemPrompt(
+					category,
+					difficulty,
+					req.FrontendFramework,
+					req.Styling,
+					provider,
+				),
+			},
+			{
+				Role: "user",
+				Content: g.userPrompt(
+					category,
+					difficulty,
+					req.CustomPrompt,
+					req.Provider,
+					provider,
+					req.FrontendFramework,
+					req.Styling,
+				),
+			},
 		},
 	}
 
@@ -346,11 +418,26 @@ func (g *LLMProblemGenerator) Generate(ctx context.Context, req api.GenerateRequ
 	return pack, nil
 }
 
-func (g *LLMProblemGenerator) systemPrompt(category, difficulty, provider string) string {
+func (g *LLMProblemGenerator) systemPrompt(category, difficulty, framework, styling, provider string) string {
 	var providerLine string
 	if provider != "" {
 		providerLine = fmt.Sprintf("Provider: %s\n", provider)
 	}
+
+	framework = strings.TrimSpace(framework)
+	styling = strings.TrimSpace(styling)
+
+	var workspaceGuidance strings.Builder
+	workspaceGuidance.WriteString("- workspace_template: include an entry file path and a dictionary of starter files (each item specifying a code string).\n")
+	if framework != "" {
+		workspaceGuidance.WriteString(fmt.Sprintf("- Honor the requested frontend framework \"%s\" when preparing starter files.\n", framework))
+	} else {
+		workspaceGuidance.WriteString("- For non-frontend categories, provide a minimal starter implementation aligned with the function signature.\n")
+	}
+	if styling != "" {
+		workspaceGuidance.WriteString(fmt.Sprintf("- Apply the styling preference \"%s\" where appropriate (e.g., Tailwind setup vs. vanilla CSS).\n", styling))
+	}
+	workspaceGuidance.WriteString("- Limit total starter files to 10 and ensure the entry file exists in the files map.\n")
 
 	return fmt.Sprintf(`You are Improview’s problem generator. Return ONLY JSON matching the schema.
 %sConstraints:
@@ -364,14 +451,17 @@ Provide:
 - hint: short, actionable
 - tests: public[] and hidden[] with deterministic inputs and expected outputs
 - solutions: 1-2 idiomatic approaches with Big-O
-Rules:
+- macro_category: set to "dsa", "frontend", or "system-design" based on the category type
+%sRules:
 - Keep tests minimal but comprehensive; avoid randomness.
 - No external libs; pure functions only.
 - Ensure tests align with the signature exactly.
-- Prefer BFS/DFS/Two-Pointers/etc as per category.`, providerLine, category, difficulty)
+- Prefer BFS/DFS/Two-Pointers/etc as per category.
+- For macro_category: use "dsa" for algorithms/data structures, "frontend" for UI/web development, "system-design" for architecture/scalability.
+- Apply workspace_template so the sandbox reflects the requested framework and styling when the macro category is "frontend".`, providerLine, category, difficulty, workspaceGuidance.String())
 }
 
-func (g *LLMProblemGenerator) userPrompt(category, difficulty, customPrompt, providerOverride, defaultProvider string) string {
+func (g *LLMProblemGenerator) userPrompt(category, difficulty, customPrompt, providerOverride, defaultProvider, framework, styling string) string {
 	lines := []string{
 		fmt.Sprintf("Generate a fresh problem pack for category \"%s\" at \"%s\" difficulty.", category, difficulty),
 	}
@@ -382,6 +472,14 @@ func (g *LLMProblemGenerator) userPrompt(category, difficulty, customPrompt, pro
 	}
 	if provider != "" {
 		lines = append(lines, fmt.Sprintf("If you must reference a provider, assume %s.", provider))
+	}
+
+	if trimmed := strings.TrimSpace(framework); trimmed != "" {
+		lines = append(lines, fmt.Sprintf("Frontend framework preference: %s.", trimmed))
+	}
+
+	if trimmed := strings.TrimSpace(styling); trimmed != "" {
+		lines = append(lines, fmt.Sprintf("Styling preference: %s.", trimmed))
 	}
 
 	if extra := strings.TrimSpace(customPrompt); extra != "" {

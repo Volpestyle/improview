@@ -97,23 +97,40 @@ export function ProblemPanel({ problem }: ProblemPanelProps) {
                 {hintVisible ? 'Hide Hint' : 'Show Hint'}
               </span>
             </Button>
-            <AnimatePresence>
-              {hintVisible && (
+            <AnimatePresence initial={false}>
+              {hintVisible ? (
                 <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.3 }}
-                  className="rounded-lg p-4"
+                  key="hint"
+                  layout
+                  initial={{ opacity: 0, scaleY: 0.9 }}
+                  animate={{ opacity: 1, scaleY: 1 }}
+                  exit={{ opacity: 0, scaleY: 0.9 }}
+                  transition={{
+                    opacity: { duration: 0.16, ease: 'easeOut' },
+                    scaleY: { duration: 0.24, ease: [0.22, 1, 0.36, 1] },
+                    layout: { duration: 0.24, ease: [0.22, 1, 0.36, 1] },
+                  }}
+                  className="rounded-lg border p-4"
                   style={{
+                    originY: 0,
                     backgroundColor: 'var(--accent-soft)',
                     borderColor: 'var(--accent-primary)',
                     borderWidth: '1px',
+                    overflow: 'hidden',
                   }}
                 >
-                  💡 {problem.hint}
+                  <motion.span
+                    layout
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.18, ease: 'easeOut' }}
+                    className="block"
+                  >
+                    💡 {problem.hint}
+                  </motion.span>
                 </motion.div>
-              )}
+              ) : null}
             </AnimatePresence>
           </div>
         </div>

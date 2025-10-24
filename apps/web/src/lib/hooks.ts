@@ -261,14 +261,14 @@ export function useSaveProblem() {
             return apiClient.createSavedProblem(request);
         },
         onSuccess: (response) => {
-            // Invalidate saved problems list to refresh
-            queryClient.invalidateQueries({ queryKey: queryKeys.savedProblems() });
+            // Invalidate saved problems list to refresh all status variants
+            queryClient.invalidateQueries({ queryKey: ['saved-problems'] });
 
-            // Set the new saved problem in the cache
-            queryClient.setQueryData(
-                queryKeys.savedProblem(response.saved_problem.id),
-                response.saved_problem
-            );
+            // Seed the saved problem detail cache
+            queryClient.setQueryData(queryKeys.savedProblemDetail(response.saved_problem.id), {
+                ...response.saved_problem,
+                attempts: [],
+            });
         },
         onError: (error) => {
             console.error('Failed to save problem:', error);

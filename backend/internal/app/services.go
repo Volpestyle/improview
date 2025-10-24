@@ -246,7 +246,7 @@ func newServices(clock api.Clock, options ServicesOptions) (api.Services, error)
 	submission := SubmissionService{Runner: runner, Attempts: attempts}
 
 	var profiles api.UserProfileStore
-	var savedProblems api.SavedProblemStore
+	var savedProblems api.SavedProblemStore = NewMemorySavedProblemStore(clock)
 	if tableName := strings.TrimSpace(os.Getenv("TABLE_NAME")); tableName != "" {
 		store, err := NewDynamoUserDataStoreFromEnv(context.Background(), tableName, strings.TrimSpace(os.Getenv("TABLE_INDEX_ATTEMPT_LOOKUP")), strings.TrimSpace(os.Getenv("TABLE_INDEX_USER_ACTIVITY")))
 		if err != nil {

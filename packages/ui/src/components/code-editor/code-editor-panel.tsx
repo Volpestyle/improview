@@ -1,5 +1,14 @@
-import { AnimatePresence, motion } from 'framer-motion';
-import { Loader2, Play, Send, CheckCircle2, AlertCircle, RotateCcw } from 'lucide-react';
+import { motion } from 'framer-motion';
+import {
+  Loader2,
+  Play,
+  Send,
+  CheckCircle2,
+  AlertCircle,
+  RotateCcw,
+  ChevronDown,
+  ChevronUp,
+} from 'lucide-react';
 import {
   Fragment,
   useCallback,
@@ -8,6 +17,7 @@ import {
   useState,
   useEffect,
   type ReactNode,
+  type CSSProperties,
 } from 'react';
 import {
   SandpackProvider,
@@ -82,6 +92,12 @@ const createSandpackThemeFromTokens = (tokens: DesignTokens, mode: ThemeMode): S
 
 const FALLBACK_SANDBOX_THEME = createSandpackThemeFromTokens(FALLBACK_TOKENS, 'light');
 
+const DEFAULT_RESULTS_HEIGHT = 240;
+const MIN_RESULTS_HEIGHT = 160;
+const MIN_EDITOR_HEIGHT = 200;
+const RESIZE_HANDLE_HEIGHT = 12;
+const COLLAPSE_THRESHOLD = 16;
+
 const DEFAULT_HTML_TEMPLATE = `<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -109,8 +125,7 @@ const DEFAULT_HTML_TEMPLATE = `<!DOCTYPE html>
 
 type MaybeResults = TestResult[] | null;
 
-const ensureLeadingSlash = (name: string): string =>
-  name.startsWith('/') ? name : `/${name}`;
+const ensureLeadingSlash = (name: string): string => (name.startsWith('/') ? name : `/${name}`);
 
 const getFileDisplayName = (path: string): string => path.replace(/^\//, '');
 
@@ -154,10 +169,7 @@ const getCodeFromBundlerFile = (entry: unknown): string => {
   return '';
 };
 
-const toSandpackFile = (
-  entry: string | SandpackFile | undefined,
-  code: string,
-): SandpackFile => {
+const toSandpackFile = (entry: string | SandpackFile | undefined, code: string): SandpackFile => {
   if (entry && typeof entry === 'object') {
     return { ...entry, code };
   }
@@ -411,18 +423,40 @@ export const CodeEditorPanel = ({
   const initialCodeRef = useRef<string>();
   if (initialCodeRef.current === undefined) {
     const providedCode = getCodeFromEntry(providedMainFile);
-    const fallback =
-      typeof value === 'string' ? value : defaultValue ?? providedCode ?? '';
+    let fallback = '';
+    if (defaultValue !== undefined) {
+      fallback = defaultValue;
+    } else if (providedCode !== undefined) {
+      fallback = providedCode;
+    } else if (typeof value === 'string') {
+      fallback = value;
+    }
     initialCodeRef.current = fallback;
   }
+
+  useEffect(() => {
+    if (defaultValue !== undefined) {
+      initialCodeRef.current = defaultValue;
+    }
+  }, [defaultValue]);
 
   const [internalCode, setInternalCode] = useState(initialCodeRef.current ?? '');
   const [internalResults, setInternalResults] = useState<MaybeResults>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [resetCounter, setResetCounter] = useState(0);
+  const [resultsHeight, setResultsHeight] = useState(0);
+  const lastExpandedHeightRef = useRef(DEFAULT_RESULTS_HEIGHT);
+  const resizeStateRef = useRef<{
+    pointerId: number;
+    startY: number;
+    startHeight: number;
+    releasePointerCapture?: () => void;
+  } | null>(null);
+  const editorBodyRef = useRef<HTMLDivElement>(null);
 
-  const code = isControlled ? value ?? '' : internalCode;
+  const code = isControlled ? (value ?? '') : internalCode;
   const effectiveResults = results ?? internalResults;
 
   const setResults = useCallback(
@@ -435,19 +469,13 @@ export const CodeEditorPanel = ({
 
   const initialCode = initialCodeRef.current ?? '';
 
-  const defaultSandbox = useMemo(
-    () => createDefaultSandboxFiles(mainFilePath, initialCode, isTypeScript),
-    [mainFilePath, initialCode, isTypeScript],
-  );
+  const defaultSandbox = useMemo(() => {
+    void resetCounter;
+    return createDefaultSandboxFiles(mainFilePath, initialCode, isTypeScript);
+  }, [mainFilePath, initialCode, isTypeScript, resetCounter]);
 
   const sandpackFiles = useMemo(
-    () =>
-      mergeSandboxFiles(
-        defaultSandbox.files,
-        sandpackFilesProp,
-        mainFilePath,
-        initialCode,
-      ),
+    () => mergeSandboxFiles(defaultSandbox.files, sandpackFilesProp, mainFilePath, initialCode),
     [defaultSandbox, sandpackFilesProp, mainFilePath, initialCode],
   );
 
@@ -487,17 +515,11 @@ export const CodeEditorPanel = ({
     }
 
     return merged;
-  }, [
-    sandpackOptions,
-    mainFilePath,
-    readOnly,
-    showFileExplorer,
-    defaultSandbox.appFile,
-  ]);
+  }, [sandpackOptions, mainFilePath, readOnly, showFileExplorer, defaultSandbox.appFile]);
 
   const providerKey = useMemo(
-    () => `${template}-${mainFilePath}`,
-    [template, mainFilePath],
+    () => `${template}-${mainFilePath}-${resetCounter}`,
+    [template, mainFilePath, resetCounter],
   );
 
   const handleEditorCodeChange = useCallback(
@@ -520,9 +542,7 @@ export const CodeEditorPanel = ({
       setResults(resultList);
     } catch (error) {
       console.error('Run tests failed', error);
-      setErrorMessage(
-        error instanceof Error ? error.message : 'Failed to run tests',
-      );
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to run tests');
     } finally {
       setIsRunning(false);
     }
@@ -537,9 +557,7 @@ export const CodeEditorPanel = ({
       setResults(response.results);
     } catch (error) {
       console.error('Submit failed', error);
-      setErrorMessage(
-        error instanceof Error ? error.message : 'Submission failed',
-      );
+      setErrorMessage(error instanceof Error ? error.message : 'Submission failed');
     } finally {
       setIsSubmitting(false);
     }
@@ -559,8 +577,133 @@ export const CodeEditorPanel = ({
     });
   }, [effectiveResults]);
 
-  const isResetDisabled = readOnly || code === initialCode;
+  const showOutput = !!errorMessage || (effectiveResults && effectiveResults.length > 0);
+  const isResultsCollapsed = resultsHeight <= COLLAPSE_THRESHOLD;
 
+  const clampResultsHeight = useCallback((value: number) => {
+    const container = editorBodyRef.current;
+    if (!container) {
+      return Math.max(0, value);
+    }
+    const rect = container.getBoundingClientRect();
+    if (!Number.isFinite(rect.height) || rect.height <= 0) {
+      return Math.max(0, value);
+    }
+    // Allow results to take up to full container height minus resize handle
+    // since editor overlays underneath in overlay mode
+    const max = Math.max(rect.height - RESIZE_HANDLE_HEIGHT, 0);
+    const clamped = Math.max(0, Math.min(value, max));
+    return clamped;
+  }, []);
+
+  const prevShowOutputRef = useRef(showOutput);
+  useEffect(() => {
+    if (showOutput && !prevShowOutputRef.current) {
+      const restored = clampResultsHeight(
+        Math.max(lastExpandedHeightRef.current, MIN_RESULTS_HEIGHT),
+      );
+      lastExpandedHeightRef.current =
+        restored > COLLAPSE_THRESHOLD ? restored : DEFAULT_RESULTS_HEIGHT;
+      setResultsHeight(restored > COLLAPSE_THRESHOLD ? restored : DEFAULT_RESULTS_HEIGHT);
+    }
+    if (!showOutput && prevShowOutputRef.current) {
+      resizeStateRef.current = null;
+      lastExpandedHeightRef.current = DEFAULT_RESULTS_HEIGHT;
+      setResultsHeight((prev) => (prev > COLLAPSE_THRESHOLD ? prev : 0));
+    }
+    prevShowOutputRef.current = showOutput;
+  }, [showOutput, clampResultsHeight]);
+
+  const handleResizePointerDown = useCallback(
+    (event: React.PointerEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      const baseHeight = resultsHeight;
+      const startHeight = clampResultsHeight(baseHeight);
+      const releasePointerCapture = () => {
+        try {
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        } catch {
+          // ignore capture release errors
+        }
+      };
+      resizeStateRef.current = {
+        pointerId: event.pointerId,
+        startY: event.clientY,
+        startHeight,
+        releasePointerCapture,
+      };
+      event.currentTarget.setPointerCapture(event.pointerId);
+    },
+    [showOutput, resultsHeight, clampResultsHeight],
+  );
+
+  const handleResizePointerMove = useCallback(
+    (event: PointerEvent) => {
+      const state = resizeStateRef.current;
+      if (!state) {
+        return;
+      }
+      const delta = state.startY - event.clientY; // Flip direction: dragging down decreases height
+      const nextHeight = clampResultsHeight(state.startHeight + delta);
+      setResultsHeight(nextHeight);
+      if (nextHeight > COLLAPSE_THRESHOLD) {
+        lastExpandedHeightRef.current = nextHeight;
+      }
+    },
+    [clampResultsHeight],
+  );
+
+  const handleResizePointerUp = useCallback(() => {
+    const state = resizeStateRef.current;
+    if (!state) {
+      return;
+    }
+    state.releasePointerCapture?.();
+    resizeStateRef.current = null;
+    setResultsHeight((prev) => {
+      if (prev > COLLAPSE_THRESHOLD) {
+        lastExpandedHeightRef.current = prev;
+      }
+      return prev;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    const moveListener = (event: PointerEvent) => handleResizePointerMove(event);
+    const upListener = () => handleResizePointerUp();
+    window.addEventListener('pointermove', moveListener);
+    window.addEventListener('pointerup', upListener);
+    return () => {
+      window.removeEventListener('pointermove', moveListener);
+      window.removeEventListener('pointerup', upListener);
+    };
+  }, [handleResizePointerMove, handleResizePointerUp]);
+
+  const handleResultsToggle = useCallback(() => {
+    setResultsHeight((prev) => {
+      if (prev <= COLLAPSE_THRESHOLD) {
+        const restored = clampResultsHeight(
+          Math.max(lastExpandedHeightRef.current, MIN_RESULTS_HEIGHT),
+        );
+        if (restored > COLLAPSE_THRESHOLD) {
+          lastExpandedHeightRef.current = restored;
+        }
+        return restored;
+      }
+      lastExpandedHeightRef.current = clampResultsHeight(Math.max(prev, MIN_RESULTS_HEIGHT));
+      return 0;
+    });
+  }, [clampResultsHeight]);
+
+  const clampedResultsHeight = clampResultsHeight(resultsHeight);
+  const visibleResultsHeight =
+    clampedResultsHeight <= COLLAPSE_THRESHOLD ? 0 : clampedResultsHeight;
+
+  const isResetDisabled = !!readOnly;
+  const effectiveResultsHeight = Math.max(0, visibleResultsHeight);
   const handleResetCode = useCallback(() => {
     if (readOnly) return;
     const startingCode = initialCodeRef.current ?? '';
@@ -570,13 +713,21 @@ export const CodeEditorPanel = ({
     onChange?.(startingCode);
     setResults(null);
     setErrorMessage(null);
-  }, [isControlled, onChange, readOnly, setResults, setInternalCode, setErrorMessage]);
+    setResetCounter((count) => count + 1);
+  }, [
+    isControlled,
+    onChange,
+    readOnly,
+    setResults,
+    setInternalCode,
+    setErrorMessage,
+    setResetCounter,
+  ]);
 
   const renderResult = (result: TestResult, index: number) => {
     const isPass = result.status === 'pass';
     const showExpectation =
-      result.status !== 'pass' &&
-      (result.expected !== undefined || result.actual !== undefined);
+      result.status !== 'pass' && (result.expected !== undefined || result.actual !== undefined);
     const statusLabel = result.label ?? `Test ${index + 1}`;
     return (
       <motion.div
@@ -637,6 +788,8 @@ export const CodeEditorPanel = ({
       customSetup={sandpackSetup}
       options={providerOptions}
       theme={resolvedSandpackTheme}
+      className="flex h-full min-h-0 flex-1 flex-col"
+      style={{ height: '100%' }}
     >
       <SandpackCodeBridge
         filePath={mainFilePath}
@@ -646,7 +799,7 @@ export const CodeEditorPanel = ({
       />
       <div
         className={cn(
-          'flex h-full min-h-[420px] flex-col overflow-hidden rounded-lg border border-border-subtle bg-[var(--editor-background)]',
+          'flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border-subtle bg-[var(--editor-background)]',
           className,
         )}
       >
@@ -703,81 +856,133 @@ export const CodeEditorPanel = ({
             </Button>
           </div>
         </div>
+        <div
+          ref={editorBodyRef}
+          className="relative flex h-full flex-1 min-h-0 flex-col overflow-hidden"
+        >
+          <SandpackPanel
+            showFileExplorer={showFileExplorer}
+            showPreview={showPreview}
+            showSandpackConsole={showSandpackConsole}
+            readOnly={!!readOnly}
+          />
 
-        <SandpackPanel
-          showFileExplorer={showFileExplorer}
-          showPreview={showPreview}
-          showSandpackConsole={showSandpackConsole}
-          readOnly={!!readOnly}
-        />
-
-        <AnimatePresence initial={false}>
-          {(effectiveResults && effectiveResults.length > 0) || errorMessage ? (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className="border-t border-border-subtle bg-bg-panel"
+          <>
+            <div
+              className="group absolute left-0 right-0 flex border-t border-border-subtle bg-bg-panel"
+              style={{ height: RESIZE_HANDLE_HEIGHT, bottom: effectiveResultsHeight }}
             >
-              <Tabs defaultValue="results" className="w-full">
-                <TabsList className="h-10 rounded-none border-b border-border-subtle bg-transparent px-4">
-                  <TabsTrigger
+              <button
+                type="button"
+                aria-label="Resize results panel"
+                className="flex h-full w-full cursor-row-resize select-none items-center justify-center bg-transparent outline-none transition-colors"
+                onPointerDown={handleResizePointerDown}
+                onDoubleClick={handleResultsToggle}
+              >
+                <span className="pointer-events-none h-[2px] w-16 rounded-full bg-border-default transition-colors group-hover:bg-border-focus" />
+              </button>
+              <button
+                type="button"
+                onClick={handleResultsToggle}
+                onPointerDown={(event) => {
+                  event.stopPropagation();
+                }}
+                className="absolute right-3 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded border border-border-subtle bg-bg-panel text-fg-muted opacity-0 transition focus:opacity-100 group-hover:opacity-100"
+                aria-label={isResultsCollapsed ? 'Expand results panel' : 'Collapse results panel'}
+                aria-expanded={!isResultsCollapsed}
+              >
+                {isResultsCollapsed ? (
+                  <ChevronUp className="h-4 w-4" aria-hidden="true" />
+                ) : (
+                  <ChevronDown className="h-4 w-4" aria-hidden="true" />
+                )}
+              </button>
+            </div>
+            <motion.div
+              key="results"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{
+                height: effectiveResultsHeight,
+                opacity: effectiveResultsHeight > 0 ? 1 : 0,
+                y: 0,
+              }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              style={{
+                height: effectiveResultsHeight,
+                pointerEvents: effectiveResultsHeight > COLLAPSE_THRESHOLD ? 'auto' : 'none',
+              }}
+              className="absolute bottom-0 left-0 right-0 overflow-hidden border-t border-border-subtle bg-bg-panel"
+            >
+              <div className="flex h-full flex-col">
+                <Tabs defaultValue="results" className="flex h-full flex-col">
+                  <TabsList className="h-10 rounded-none border-b border-border-subtle bg-transparent px-4">
+                    <TabsTrigger
+                      value="results"
+                      className="rounded-none border-b-2 border-transparent data-[state=active]:border-border-focus data-[state=active]:bg-transparent data-[state=active]:text-fg-default"
+                    >
+                      Results
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="console"
+                      className="rounded-none border-b-2 border-transparent data-[state=active]:border-border-focus data-[state=active]:bg-transparent data-[state=active]:text-fg-default"
+                    >
+                      Console
+                    </TabsTrigger>
+                  </TabsList>
+                  <TabsContent
                     value="results"
-                    className="rounded-none border-b-2 border-transparent data-[state=active]:border-border-focus data-[state=active]:bg-transparent data-[state=active]:text-fg-default"
+                    className="m-0 flex-1 overflow-hidden border-0 bg-transparent p-0"
                   >
-                    Results
-                  </TabsTrigger>
-                  <TabsTrigger
+                    <ScrollArea className="h-full">
+                      <div className="space-y-3 p-4">
+                        {errorMessage ? (
+                          <div className="flex items-start gap-2 rounded-lg border border-danger-600/30 bg-danger-soft/20 p-3 text-danger-600">
+                            <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden="true" />
+                            <p className="text-sm">{errorMessage}</p>
+                          </div>
+                        ) : effectiveResults && effectiveResults.length > 0 ? (
+                          effectiveResults.map((result, index) => (
+                            <Fragment key={result.id ?? index}>{renderResult(result, index)}</Fragment>
+                          ))
+                        ) : (
+                          <p className="text-center text-sm text-fg-muted">
+                            Run tests to see results.
+                          </p>
+                        )}
+                      </div>
+                    </ScrollArea>
+                  </TabsContent>
+                  <TabsContent
                     value="console"
-                    className="rounded-none border-b-2 border-transparent data-[state=active]:border-border-focus data-[state=active]:bg-transparent data-[state=active]:text-fg-default"
+                    className="m-0 flex-1 overflow-hidden border-0 bg-transparent p-0"
                   >
-                    Console
-                  </TabsTrigger>
-                </TabsList>
-                <TabsContent value="results" className="m-0 border-0 bg-transparent p-0">
-                  <ScrollArea className="h-56">
-                    <div className="space-y-3 p-4">
-                      {errorMessage ? (
-                        <div className="flex items-start gap-2 rounded-lg border border-danger-600/30 bg-danger-soft/20 p-3 text-danger-600">
-                          <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden="true" />
-                          <p className="text-sm">{errorMessage}</p>
-                        </div>
-                      ) : (
-                        effectiveResults?.map((result, index) => (
-                          <Fragment key={result.id ?? index}>{renderResult(result, index)}</Fragment>
-                        ))
-                      )}
-                    </div>
-                  </ScrollArea>
-                </TabsContent>
-                <TabsContent value="console" className="m-0 border-0 bg-transparent p-0">
-                  <ScrollArea className="h-56">
-                    <div className="p-4">
-                      {consoleOutput.length === 0 ? (
-                        <p className="text-center text-sm text-fg-muted">No console output</p>
-                      ) : (
-                        <div className="space-y-2">
-                          {consoleOutput.map((item) => (
-                            <pre
-                              key={item.id}
-                              className={cn(
-                                'whitespace-pre-wrap rounded bg-bg-sunken/50 p-2 text-xs',
-                                item.type === 'stderr' ? 'text-danger-600' : 'text-fg-muted',
-                              )}
-                            >
-                              {item.text}
-                            </pre>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </ScrollArea>
-                </TabsContent>
-              </Tabs>
+                    <ScrollArea className="h-full">
+                      <div className="p-4">
+                        {consoleOutput.length === 0 ? (
+                          <p className="text-center text-sm text-fg-muted">No console output</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {consoleOutput.map((item) => (
+                              <pre
+                                key={item.id}
+                                className={cn(
+                                  'whitespace-pre-wrap rounded bg-bg-sunken/50 p-2 text-xs',
+                                  item.type === 'stderr' ? 'text-danger-600' : 'text-fg-muted',
+                                )}
+                              >
+                                {item.text}
+                              </pre>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </ScrollArea>
+                  </TabsContent>
+                </Tabs>
+              </div>
             </motion.div>
-          ) : null}
-        </AnimatePresence>
+          </>
+        </div>
       </div>
     </SandpackProvider>
   );
@@ -797,17 +1002,29 @@ const SandpackPanel = ({
   readOnly,
 }: SandpackPanelProps) => {
   return (
-    <div className="flex flex-1 flex-col overflow-hidden border-b border-border-subtle">
-      <div className="flex flex-1 flex-col overflow-hidden lg:flex-row">
+    <div className="flex h-full flex-1 min-h-0 flex-col overflow-hidden">
+      <div className="flex h-full flex-1 min-h-0 flex-col overflow-hidden lg:flex-row">
         {showFileExplorer ? (
           <div className="hidden w-60 flex-shrink-0 border-b border-border-subtle bg-[var(--editor-gutter)] lg:flex lg:flex-col lg:border-b-0 lg:border-r">
             <SandpackFileExplorer className="flex-1 overflow-auto text-xs text-[var(--editor-line-number)]" />
           </div>
         ) : null}
-        <div className={cn('flex flex-1 flex-col overflow-hidden', showPreview ? 'lg:flex-row' : '')}>
-          <div className={cn('flex flex-1 flex-col overflow-hidden', showPreview ? 'lg:w-[60%]' : 'lg:w-full')}>
+        <div
+          className={cn(
+            'flex h-full flex-1 min-h-0 flex-col overflow-hidden',
+            showPreview ? 'lg:flex-row' : '',
+          )}
+        >
+          <div
+            className={cn(
+              'flex h-full flex-1 min-h-0 flex-col overflow-hidden',
+              showPreview ? 'lg:w-[60%]' : 'lg:w-full',
+            )}
+            style={{ height: '100%' }}
+          >
             <SandpackCodeEditor
-              className="flex-1 min-h-[260px] bg-[var(--editor-background)] text-sm"
+              className="flex-1 h-full bg-[var(--editor-background)] text-sm"
+              style={{ height: '100%' }}
               showTabs
               showLineNumbers
               showInlineErrors
@@ -816,9 +1033,10 @@ const SandpackPanel = ({
             />
           </div>
           {showPreview ? (
-            <div className="flex flex-col border-t border-border-subtle bg-bg-panel lg:w-[40%] lg:border-t-0 lg:border-l">
+            <div className="flex h-full min-h-0 flex-col border-t border-border-subtle bg-bg-panel lg:w-[40%] lg:border-t-0 lg:border-l">
               <SandpackPreview
                 className="flex-1 min-h-[240px] bg-[var(--bg-elevated)] text-[var(--fg-default)]"
+                style={{ height: '100%' }}
                 showNavigator
               />
               {showSandpackConsole ? (

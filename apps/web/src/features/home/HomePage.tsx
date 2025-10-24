@@ -1,16 +1,15 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
+import type React from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import {
   Badge,
   Button,
-  CodeEditorPanel,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  SplitPane,
   Textarea,
   ThemeToggle,
   useToast,
@@ -34,12 +33,10 @@ import {
   ProblemPack,
   Attempt,
 } from '../../types/problem';
-import { ProblemPanel } from '../../components/ProblemPanel';
+import { WorkspaceSplitView } from '../../components/WorkspaceSplitView';
 import { Timer } from '../../components/Timer';
-import {
-  getSandboxConfigForCategory,
-  inferMacroCategoryFromProblem,
-} from '../../utils/sandboxConfig';
+import { getSandboxConfigForCategory } from '../../utils/sandboxConfig';
+import { deriveWorkspaceConfig } from '../../utils/workspaceTemplate';
 
 const macroCategories: {
   value: MacroCategory;
@@ -92,11 +89,15 @@ const providers: { value: Provider; label: string }[] = [
   { value: 'grok', label: 'Grok 4 Fast' },
 ];
 
-const buildSolutionTemplate = (problem: ProblemPack) =>
-  `function ${problem.api.function_name}(${problem.api.params.map((p) => p.name).join(', ')}) {
-  // Your implementation here
+const frontendFrameworks = [
+  { value: 'React', label: 'React' },
+  { value: 'Vanilla JS', label: 'Vanilla JS' },
+] as const;
 
-}`;
+const stylingOptions = [
+  { value: 'Tailwind CSS', label: 'Tailwind CSS' },
+  { value: 'Vanilla CSS', label: 'Vanilla CSS' },
+] as const;
 
 export function HomePage() {
   const navigate = useNavigate();
@@ -108,6 +109,12 @@ export function HomePage() {
   const [selectedCategory, setSelectedCategory] = useState<Category>('bfs-dfs');
   const [selectedDifficulty, setSelectedDifficulty] = useState<Difficulty>('medium');
   const [selectedProvider, setSelectedProvider] = useState<Provider>('openai');
+  const [selectedFramework, setSelectedFramework] = useState<(typeof frontendFrameworks)[number]['value']>(
+    'React',
+  );
+  const [selectedStyling, setSelectedStyling] = useState<(typeof stylingOptions)[number]['value']>(
+    'Tailwind CSS',
+  );
   const [customPrompt, setCustomPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [currentProblem, setCurrentProblem] = useState<ProblemPack | null>(null);
@@ -126,17 +133,6 @@ export function HomePage() {
 
   const workspaceRef = useRef<HTMLDivElement>(null);
   const workspaceHeaderRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!currentProblem) {
-      setSolutionCode('');
-      resetSaveMutation();
-      return;
-    }
-
-    setSolutionCode(buildSolutionTemplate(currentProblem));
-    resetSaveMutation();
-  }, [currentProblem, resetSaveMutation]);
 
   // Scroll detection for nav bar hiding/showing
   useEffect(() => {
@@ -200,7 +196,7 @@ export function HomePage() {
   };
 
   const activeMacroCategory = useMemo<MacroCategory>(
-    () => (currentProblem ? inferMacroCategoryFromProblem(currentProblem) : selectedMacroCategory),
+    () => (currentProblem ? currentProblem.macro_category : selectedMacroCategory),
     [currentProblem, selectedMacroCategory],
   );
 
@@ -208,6 +204,26 @@ export function HomePage() {
     () => getSandboxConfigForCategory(activeMacroCategory),
     [activeMacroCategory],
   );
+
+  const workspaceConfig = useMemo(
+    () => (currentProblem ? deriveWorkspaceConfig(currentProblem) : null),
+    [currentProblem],
+  );
+
+  const editorFileName = workspaceConfig?.fileName ?? 'solution.js';
+  const editorLanguage = workspaceConfig?.language ?? 'javascript';
+  const defaultEditorCode = workspaceConfig?.initialCode ?? '';
+
+  useEffect(() => {
+    if (!currentProblem) {
+      setSolutionCode('');
+      resetSaveMutation();
+      return;
+    }
+
+    setSolutionCode(defaultEditorCode);
+    resetSaveMutation();
+  }, [currentProblem, defaultEditorCode, resetSaveMutation]);
 
   const handleGenerate = async () => {
     setIsGenerating(true);
@@ -220,6 +236,9 @@ export function HomePage() {
         difficulty: selectedDifficulty,
         customPrompt: customPrompt || undefined,
         provider: selectedProvider,
+        frontendFramework:
+          selectedMacroCategory === 'frontend' ? selectedFramework : undefined,
+        styling: selectedMacroCategory === 'frontend' ? selectedStyling : undefined,
         mode:
           import.meta.env.VITE_API_MODE === 'static' || import.meta.env.VITE_API_MODE === 'llm'
             ? (import.meta.env.VITE_API_MODE as 'static' | 'llm')
@@ -562,6 +581,51 @@ export function HomePage() {
             </div>
           </div>
 
+          {selectedMacroCategory === 'frontend' ? (
+            <div className="grid gap-6 sm:grid-cols-2">
+              <div className="space-y-3">
+                <label htmlFor="framework-group">Framework</label>
+                <div
+                  className="flex flex-wrap gap-2"
+                  role="group"
+                  id="framework-group"
+                  aria-label="Select frontend framework"
+                >
+                  {frontendFrameworks.map(({ value, label }) => (
+                    <Button
+                      key={value}
+                      variant="selectable"
+                      onClick={() => setSelectedFramework(value)}
+                      aria-pressed={selectedFramework === value}
+                    >
+                      {label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-3">
+                <label htmlFor="styling-group">Styling</label>
+                <div
+                  className="flex flex-wrap gap-2"
+                  role="group"
+                  id="styling-group"
+                  aria-label="Select styling preference"
+                >
+                  {stylingOptions.map(({ value, label }) => (
+                    <Button
+                      key={value}
+                      variant="selectable"
+                      onClick={() => setSelectedStyling(value)}
+                      aria-pressed={selectedStyling === value}
+                    >
+                      {label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
           {/* Provider Selection */}
           <div className="space-y-3">
             <label htmlFor="provider-group">AI Provider</label>
@@ -727,40 +791,33 @@ export function HomePage() {
               </div>
 
               {/* Problem + Editor Split */}
-              <div className="h-[calc(100vh-120px)]">
-                <SplitPane
+              <div className="h-[calc(100vh-120px)] min-h-0">
+                <WorkspaceSplitView
                   className="h-full"
+                  problem={currentProblem}
+                  editorKey={currentProblem.problem.title}
                   minLeft={360}
                   minRight={360}
                   initialFraction={0.5}
-                  left={
-                    <div
-                      className="h-full border-r bg-[var(--bg-sunken)]"
-                      style={{ borderColor: 'var(--border-default)' }}
-                    >
-                      <ProblemPanel problem={currentProblem} />
-                    </div>
-                  }
-                  right={
-                    <div className="flex min-h-0 h-full flex-1 flex-col bg-[var(--bg-sunken)]">
-                      <CodeEditorPanel
-                        key={currentProblem.problem.title}
-                        value={solutionCode}
-                        onChange={setSolutionCode}
-                        fileName="solution.js"
-                        language="javascript"
-                        onRunTests={handleRunTests}
-                        onSubmit={handleSubmit}
-                        runLabel="Run Tests"
-                        submitLabel="Submit"
-                        className="flex-1 rounded-none border-0 shadow-none"
-                        showPreview={sandboxConfig.showPreview}
-                        showFileExplorer={sandboxConfig.showFileExplorer}
-                        showSandpackConsole={sandboxConfig.showSandpackConsole}
-                        sandpackOptions={sandboxConfig.sandpackOptions}
-                      />
-                    </div>
-                  }
+                  editorProps={{
+                    value: solutionCode,
+                    defaultValue: defaultEditorCode,
+                    onChange: setSolutionCode,
+                    fileName: editorFileName,
+                    language: editorLanguage,
+                    onRunTests: handleRunTests,
+                    onSubmit: handleSubmit,
+                    runLabel: 'Run Tests',
+                    submitLabel: 'Submit',
+                    className: 'flex-1 rounded-none border-0 shadow-none',
+                    showPreview: sandboxConfig.showPreview,
+                    showFileExplorer: sandboxConfig.showFileExplorer,
+                    showSandpackConsole: sandboxConfig.showSandpackConsole,
+                    sandpackOptions: sandboxConfig.sandpackOptions,
+                    sandpackTemplate: workspaceConfig?.sandpackTemplate,
+                    sandpackFiles: workspaceConfig?.sandpackFiles,
+                    sandpackSetup: workspaceConfig?.sandpackSetup,
+                  }}
                 />
               </div>
             </div>
