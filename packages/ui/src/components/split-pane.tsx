@@ -43,7 +43,7 @@ export const SplitPane = ({
     [minLeft, minRight],
   );
 
-  const handlePointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+  const handlePointerDown = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
     event.preventDefault();
     const target = event.currentTarget;
     activeHandle.current = target;
@@ -108,20 +108,32 @@ export const SplitPane = ({
 
   return (
     <div ref={containerRef} className={cn('flex h-full w-full', className)}>
-      <div style={leftStyle} className="min-w-0 grow-0 shrink-0 overflow-hidden">
+      <div
+        style={leftStyle}
+        className="min-w-0 grow-0 shrink-0 overflow-hidden h-full flex flex-col"
+      >
         {left}
       </div>
       <div
         role="separator"
         aria-orientation="vertical"
         aria-hidden="true"
-        className="group relative flex w-3 cursor-col-resize items-stretch justify-center"
-        onPointerDown={handlePointerDown}
+        className="group relative flex h-full w-4 flex-none select-none items-center justify-center border-l border-border-subtle bg-bg-panel"
       >
-        <span className="pointer-events-none absolute inset-0 rounded-full transition-colors group-hover:bg-accent/10" />
-        <span className="pointer-events-none my-2 w-[2px] rounded-full bg-border-default shadow-[inset_0_0_0_1px_var(--border-subtle)] transition-colors group-hover:bg-border-focus" />
+        <button
+          type="button"
+          tabIndex={-1}
+          aria-hidden="true"
+          className="flex h-full w-full cursor-col-resize select-none items-center justify-center bg-transparent outline-none transition-colors"
+          onPointerDown={handlePointerDown}
+        >
+          <span className="pointer-events-none h-16 w-[2px] rounded-full bg-border-default transition-colors group-hover:bg-border-focus" />
+        </button>
       </div>
-      <div style={rightStyle} className="min-w-0 grow-0 shrink-0 overflow-hidden">
+      <div
+        style={rightStyle}
+        className="min-w-0 grow-0 shrink-0 overflow-hidden h-full flex flex-col"
+      >
         {right}
       </div>
     </div>
