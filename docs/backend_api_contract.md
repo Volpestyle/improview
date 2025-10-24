@@ -321,7 +321,7 @@ Create or update the authenticated user's profile. Empty or missing fields leave
 
 ### GET /api/user/saved-problems
 
-List saved problems for the authenticated user. Supports optional query params: `status` (`in_progress`, `completed`, `archived`) and `limit` (defaults to 50, max 200).
+List saved problems for the authenticated user. Supports optional query params: `status` (`in_progress`, `completed`, `archived`), `limit` (defaults to 50, max 200), and `next_token` (cursor for pagination).
 
 **Response body**
 ```json

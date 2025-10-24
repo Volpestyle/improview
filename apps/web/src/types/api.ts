@@ -78,6 +78,10 @@ export const SavedProblemSummarySchema = z.object({
     last_attempt: SavedAttemptSnapshotSchema.optional(),
 });
 
+export const SavedProblemDetailSchema = SavedProblemSummarySchema.extend({
+    attempts: z.array(SavedAttemptSnapshotSchema),
+});
+
 export const CreateSavedProblemResponseSchema = z.object({
     saved_problem: SavedProblemSummarySchema,
 });
@@ -134,3 +138,4 @@ export type AttemptWithRuns = z.infer<typeof AttemptWithRunsSchema>;
 export type CreateSavedProblemResponse = z.infer<typeof CreateSavedProblemResponseSchema>;
 export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
 export type SavedAttemptSnapshot = z.infer<typeof SavedAttemptSnapshotSchema>;
+export type SavedProblemDetail = z.infer<typeof SavedProblemDetailSchema>;

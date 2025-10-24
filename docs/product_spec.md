@@ -30,7 +30,7 @@ Non‑goals (initial): discussion forums, company‑specific problem sets, multi
 	•	Hints: hidden until toggled; count hint usages for analytics.
 	•	Example solutions: collapsed accordion (don’t show by default).
 	•	Result sheet: pass/fail, runtime/ops count (if measured), test breakdown, diff on expected vs actual for failed cases.
-	•	History: local+cloud session history (problem, code, results, time spent).
+	•	History: local+cloud session history (problem, code, results, time spent), surfaced in the Practice Library as one card per saved problem with collapsible attempt timelines.
 	•	Authentication: Google Sign-In via Amazon Cognito (federated IdP) using a custom PKCE flow; the SPA exchanges codes with Cognito directly and stores the resulting JWT—no bespoke backend auth endpoints.
 	•	Them­ing & Fonts:
 	•	UI: Geist (sans).

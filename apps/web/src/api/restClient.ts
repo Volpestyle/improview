@@ -21,6 +21,8 @@ import {
     SavedProblemSummarySchema,
     SavedAttemptSnapshot,
     SavedAttemptSnapshotSchema,
+    SavedProblemDetail,
+    SavedProblemDetailSchema,
 } from '../types/api';
 import { ProblemPack, ProblemPackSchema, RunResult } from '../types/problem';
 
@@ -103,7 +105,7 @@ export class RestClient {
     /**
      * Get saved problems for the authenticated user
      */
-    public async getSavedProblems(params?: { status?: string; limit?: number }): Promise<{
+    public async getSavedProblems(params?: { status?: string; limit?: number; next_token?: string }): Promise<{
         saved_problems: SavedProblemSummary[];
         next_token?: string | null;
     }> {
@@ -113,6 +115,9 @@ export class RestClient {
         }
         if (params?.limit !== undefined) {
             searchParams.set('limit', params.limit.toString());
+        }
+        if (params?.next_token) {
+            searchParams.set('next_token', params.next_token);
         }
         const queryString = searchParams.toString();
         const queryParams = queryString ? `?${queryString}` : '';
@@ -131,6 +136,16 @@ export class RestClient {
     public async createSavedProblem(request: CreateSavedProblemRequest): Promise<CreateSavedProblemResponse> {
         const response = await this.apiService.post<unknown>('/api/user/saved-problems', request);
         return CreateSavedProblemResponseSchema.parse(response);
+    }
+
+    /**
+     * Get a single saved problem with full detail
+     */
+    public async getSavedProblem(savedProblemId: string): Promise<SavedProblemDetail> {
+        const response = await this.apiService.get<{ saved_problem: unknown }>(
+            `/api/user/saved-problems/${savedProblemId}`,
+        );
+        return SavedProblemDetailSchema.parse(response.saved_problem);
     }
 
     /**

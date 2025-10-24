@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearch } from '@tanstack/react-router';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import {
   Badge,
   Button,
@@ -7,7 +8,6 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  ScrollArea,
   Separator,
   Tabs,
   TabsContent,
@@ -15,78 +15,403 @@ import {
   TabsTrigger,
 } from '@improview/ui';
 import {
-  BookMarked,
-  Calendar,
+  AlertTriangle,
   CheckCircle2,
+  ChevronDown,
   Clock,
   Eye,
-  FolderOpen,
-  Plus,
-  Star,
-  Trash2,
+  History,
+  Loader2,
   XCircle,
 } from 'lucide-react';
 import { BreadcrumbsNav } from '../../components/BreadcrumbsNav';
-import { mockAttempts, mockLists, mockSavedProblems } from '../../data/mockUser';
-import type { ProblemList, SavedProblem } from '../../types/user';
+import { getApiClient } from '../../lib/apiClient';
+import { queryKeys } from '../../lib/queryClient';
+import { formatDuration } from '../../lib/hooks';
+import type { SavedProblemSummary, SavedProblemDetail, SavedAttemptSnapshot } from '../../types/api';
 
-const difficultyTone: Record<string, string> = {
-  easy: 'text-success-600 border-success-600',
-  medium: 'text-warning-600 border-warning-600',
-  hard: 'text-danger-600 border-danger-600',
+const PAGE_SIZE = 20;
+
+const savedProblemStatusMeta: Record<string, { label: string; tone: string }> = {
+  in_progress: { label: 'In Progress', tone: 'text-warning-600 border-warning-600' },
+  completed: { label: 'Completed', tone: 'text-success-600 border-success-600' },
+  archived: { label: 'Archived', tone: 'text-fg-muted border-border-subtle' },
 };
 
-const formatDuration = (ms: number) => {
-  const minutes = Math.floor(ms / 60000);
-  const seconds = Math.floor((ms % 60000) / 1000);
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+const attemptStatusMeta: Record<
+  string,
+  { label: string; tone: string; icon: typeof CheckCircle2 }
+> = {
+  passed: { label: 'Passed', tone: 'text-success-600', icon: CheckCircle2 },
+  failed: { label: 'Failed', tone: 'text-danger-600', icon: XCircle },
+  submitted: { label: 'Submitted', tone: 'text-warning-600', icon: Clock },
 };
 
-const formatDate = (iso: string) => {
-  const date = new Date(iso);
+type StatusFilter = 'all' | 'in_progress' | 'completed' | 'archived';
+
+const STATUS_FILTERS: Array<{ value: StatusFilter; label: string }> = [
+  { value: 'all', label: 'All' },
+  { value: 'in_progress', label: 'In Progress' },
+  { value: 'completed', label: 'Completed' },
+  { value: 'archived', label: 'Archived' },
+];
+
+const UNKNOWN_META = { label: 'Unknown', tone: 'text-fg-muted border-border-subtle' };
+
+function formatRelativeDay(epochSeconds?: number) {
+  if (!epochSeconds) {
+    return 'Unknown';
+  }
+  const date = new Date(epochSeconds * 1000);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  if (days <= 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  if (days < 7) return `${days} days ago`;
   return date.toLocaleDateString(undefined, {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
   });
+}
+
+function formatDateTime(epochSeconds?: number) {
+  if (!epochSeconds) {
+    return '—';
+  }
+  return new Date(epochSeconds * 1000).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function getSavedProblemTitle(problem: SavedProblemSummary | SavedProblemDetail) {
+  if (problem.title && problem.title.trim().length > 0) {
+    return problem.title;
+  }
+  return `Problem ${problem.problem_id}`;
+}
+
+function getAttemptMeta(status?: string) {
+  if (!status) {
+    return {
+      label: 'No submissions',
+      tone: 'text-fg-muted',
+      icon: Clock,
+    };
+  }
+  const key = status.toLowerCase();
+  return attemptStatusMeta[key] ?? {
+    label: status,
+    tone: 'text-fg-muted',
+    icon: Clock,
+  };
+}
+
+interface AttemptRowProps {
+  attempt: SavedAttemptSnapshot;
+  onViewAttempt: (attemptId: string) => void;
+}
+
+const AttemptRow = ({ attempt, onViewAttempt }: AttemptRowProps) => {
+  const meta = getAttemptMeta(attempt.status);
+  const StatusIcon = meta.icon;
+  const submittedAt = attempt.submitted_at ?? attempt.updated_at;
+
+  return (
+    <div className="rounded-md border border-border-subtle bg-bg-sunken p-4 space-y-2">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusIcon className={`h-4 w-4 ${meta.tone}`} aria-hidden="true" />
+          <span className={`text-sm font-medium ${meta.tone}`}>
+            {meta.label}
+          </span>
+          <span className="text-xs font-mono text-fg-muted">
+            {attempt.attempt_id}
+          </span>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="gap-2"
+          onClick={() => onViewAttempt(attempt.attempt_id)}
+        >
+          <Eye className="h-4 w-4" aria-hidden="true" />
+          View results
+        </Button>
+      </div>
+      <div className="flex flex-wrap items-center gap-4 text-sm" style={{ color: 'var(--fg-muted)' }}>
+        <span>
+          Submitted {formatRelativeDay(submittedAt)} · {formatDateTime(submittedAt)}
+        </span>
+        <span>Runtime {formatDuration(Number(attempt.runtime_ms ?? 0))}</span>
+        <span>Pass {attempt.pass_count}</span>
+        <span>Fail {attempt.fail_count}</span>
+      </div>
+    </div>
+  );
 };
 
-const relativeDate = (iso: string) => {
-  const date = new Date(iso);
-  const now = new Date();
-  const diff = now.getTime() - date.getTime();
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  if (days <= 0) return 'Today';
-  if (days === 1) return 'Yesterday';
-  if (days < 7) return `${days} days ago`;
-  return formatDate(iso);
+interface SavedProblemCardProps {
+  summary: SavedProblemSummary;
+  onViewAttempt: (attemptId: string) => void;
+}
+
+const SavedProblemCard = ({ summary, onViewAttempt }: SavedProblemCardProps) => {
+  const [showAttempts, setShowAttempts] = useState(false);
+  const apiClient = getApiClient();
+
+  const { data: detail, isLoading, isError, error, refetch } = useQuery({
+    queryKey: queryKeys.savedProblemDetail(summary.id),
+    queryFn: async () => {
+      return apiClient.getSavedProblem(summary.id);
+    },
+    enabled: showAttempts,
+    staleTime: 60 * 1000,
+  });
+
+  const problem = detail ?? summary;
+  const attempts = detail?.attempts ?? [];
+  const lastAttempt = detail?.last_attempt ?? summary.last_attempt ?? attempts[0];
+  const statusMeta = savedProblemStatusMeta[problem.status] ?? UNKNOWN_META;
+  const attemptMeta = getAttemptMeta(lastAttempt?.status);
+  const AttemptMetaIcon = attemptMeta.icon;
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div className="space-y-3">
+          <CardTitle>{getSavedProblemTitle(problem)}</CardTitle>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className={statusMeta.tone}>
+              {statusMeta.label}
+            </Badge>
+            <Badge variant="outline" className="font-mono uppercase">
+              {problem.language}
+            </Badge>
+            {problem.hint_unlocked ? (
+              <Badge variant="secondary" className="gap-1">
+                <Eye className="h-3 w-3" aria-hidden="true" />
+                Hint unlocked
+              </Badge>
+            ) : null}
+            {problem.tags?.map((tag) => (
+              <Badge key={tag} variant="secondary">
+                #{tag}
+              </Badge>
+            ))}
+          </div>
+          <p className="text-sm" style={{ color: 'var(--fg-muted)' }}>
+            Updated {formatRelativeDay(problem.updated_at)} · {formatDateTime(problem.updated_at)}
+          </p>
+        </div>
+        <div className="flex flex-col items-start gap-2 text-sm md:items-end">
+          <span className={`inline-flex items-center gap-2 font-medium ${attemptMeta.tone}`}>
+            <AttemptMetaIcon className="h-4 w-4" aria-hidden="true" />
+            {attemptMeta.label}
+          </span>
+          {lastAttempt ? (
+            <span style={{ color: 'var(--fg-muted)' }}>
+              Runtime {formatDuration(Number(lastAttempt.runtime_ms ?? 0))}
+            </span>
+          ) : (
+            <span style={{ color: 'var(--fg-muted)' }}>No attempts recorded yet</span>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-4 text-sm" style={{ color: 'var(--fg-muted)' }}>
+            <span>Created {formatDateTime(problem.created_at)}</span>
+            {problem.notes ? <span>Notes: {problem.notes}</span> : null}
+          </div>
+          <div className="flex items-center gap-2">
+            {lastAttempt ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-2"
+                onClick={() => onViewAttempt(lastAttempt.attempt_id)}
+              >
+                <Eye className="h-4 w-4" aria-hidden="true" />
+                View latest
+              </Button>
+            ) : null}
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={() => setShowAttempts((prev) => !prev)}
+            >
+              <History className="h-4 w-4" aria-hidden="true" />
+              {showAttempts ? 'Hide history' : 'Show history'}
+              <ChevronDown
+                className={`h-4 w-4 transition-transform ${showAttempts ? 'rotate-180' : ''}`}
+                aria-hidden="true"
+              />
+            </Button>
+          </div>
+        </div>
+        {showAttempts ? (
+          <div className="space-y-3 border-t border-border-subtle pt-4">
+            {isLoading ? (
+              <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--fg-muted)' }}>
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                Loading attempt history…
+              </div>
+            ) : isError ? (
+              <div className="flex items-center justify-between gap-3 rounded-md border border-border-subtle bg-bg-sunken p-4">
+                <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--fg-muted)' }}>
+                  <AlertTriangle className="h-4 w-4 text-danger-600" aria-hidden="true" />
+                  Failed to load attempt history. {error instanceof Error ? error.message : ''}
+                </div>
+                <Button size="sm" variant="ghost" onClick={() => refetch()} className="gap-2">
+                  <History className="h-4 w-4" aria-hidden="true" />
+                  Retry
+                </Button>
+              </div>
+            ) : attempts.length === 0 ? (
+              <p className="text-sm" style={{ color: 'var(--fg-muted)' }}>
+                Attempts will appear here after you submit solutions for this problem.
+              </p>
+            ) : (
+              attempts.map((attempt) => (
+                <AttemptRow key={attempt.attempt_id} attempt={attempt} onViewAttempt={onViewAttempt} />
+              ))
+            )}
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
 };
+
+interface LoadMoreButtonProps {
+  hasNextPage: boolean;
+  isFetchingNextPage: boolean;
+  fetchNextPage: () => Promise<unknown>;
+}
+
+const LoadMoreButton = ({ hasNextPage, isFetchingNextPage, fetchNextPage }: LoadMoreButtonProps) => {
+  if (!hasNextPage) {
+    return null;
+  }
+
+  return (
+    <div className="flex justify-center pt-2">
+      <Button
+        variant="outline"
+        size="sm"
+        className="gap-2"
+        disabled={isFetchingNextPage}
+        onClick={() => fetchNextPage()}
+      >
+        {isFetchingNextPage ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            Loading…
+          </>
+        ) : (
+          'Load more'
+        )}
+      </Button>
+    </div>
+  );
+};
+
+const LoadingState = () => (
+  <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--fg-muted)' }}>
+    <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+    Loading Practice Library…
+  </div>
+);
+
+const ErrorState = ({ message, onRetry }: { message: string; onRetry: () => void }) => (
+  <div className="flex items-center justify-between gap-3 rounded-md border border-border-subtle bg-bg-sunken p-4 text-sm">
+    <div className="flex items-center gap-2" style={{ color: 'var(--fg-muted)' }}>
+      <AlertTriangle className="h-4 w-4 text-danger-600" aria-hidden="true" />
+      {message}
+    </div>
+    <Button variant="ghost" size="sm" className="gap-2" onClick={onRetry}>
+      <History className="h-4 w-4" aria-hidden="true" />
+      Retry
+    </Button>
+  </div>
+);
+
+const EmptyState = () => (
+  <Card>
+    <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
+      <History className="h-8 w-8 text-fg-muted" aria-hidden="true" />
+      <div>
+        <p className="text-base font-medium">No saved problems yet</p>
+        <p className="text-sm" style={{ color: 'var(--fg-muted)' }}>
+          Generate a problem and save it to start building your practice history.
+        </p>
+      </div>
+    </CardContent>
+  </Card>
+);
 
 export function PracticeLibraryPage() {
   const navigate = useNavigate();
   const search = useSearch({ from: '/history' });
+  const apiClient = getApiClient();
+
   const [tab, setTab] = useState<'history' | 'saved'>(search.tab === 'saved' ? 'saved' : 'history');
-  const [savedFilter, setSavedFilter] = useState<'all' | 'lists'>('all');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
   useEffect(() => {
     setTab(search.tab === 'saved' ? 'saved' : 'history');
   }, [search.tab]);
 
-  const savedProblems = useMemo(() => mockSavedProblems, []);
-  const attempts = useMemo(() => mockAttempts, []);
-  const lists = useMemo(() => mockLists, []);
-  const problemsByList = useMemo(
-    () =>
-      lists.map((list) => ({
-        list,
-        problems: savedProblems.filter((problem) => problem.lists.includes(list.id)),
-      })),
-    [lists, savedProblems],
+  const savedProblemsQuery = useInfiniteQuery({
+    queryKey: ['saved-problems', 'all', 'infinite'],
+    initialPageParam: undefined as string | undefined,
+    queryFn: async ({ pageParam }) => {
+      return apiClient.getSavedProblems({
+        limit: PAGE_SIZE,
+        next_token: typeof pageParam === 'string' ? pageParam : undefined,
+      });
+    },
+    getNextPageParam: (lastPage) => lastPage.next_token ?? undefined,
+  });
+
+  const savedProblems = useMemo(
+    () => savedProblemsQuery.data?.pages.flatMap((page) => page.saved_problems) ?? [],
+    [savedProblemsQuery.data],
   );
+
+  const sortedByUpdated = useMemo(
+    () => [...savedProblems].sort((a, b) => b.updated_at - a.updated_at),
+    [savedProblems],
+  );
+
+  const filteredByStatus = useMemo(() => {
+    if (statusFilter === 'all') {
+      return savedProblems;
+    }
+    return savedProblems.filter((problem) => problem.status === statusFilter);
+  }, [savedProblems, statusFilter]);
+
+  const handleTabChange = (value: string) => {
+    const tabValue = value === 'saved' ? 'saved' : 'history';
+    setTab(tabValue);
+    navigate({ to: '/history', search: { tab: tabValue } });
+  };
 
   const handleViewAttempt = (attemptId: string) => {
     navigate({ to: '/results/$attemptId', params: { attemptId } });
   };
+
+  const latestUpdate = sortedByUpdated[0];
+  const latestUpdateSummary = latestUpdate
+    ? `${formatRelativeDay(latestUpdate.updated_at)} · ${formatDateTime(latestUpdate.updated_at)}`
+    : null;
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: 'var(--bg-default)' }}>
@@ -113,219 +438,116 @@ export function PracticeLibraryPage() {
           <div className="flex flex-col gap-1">
             <h1>Practice Library</h1>
             <p style={{ color: 'var(--fg-muted)' }}>
-              Review past attempts, manage saved problems, and organise your practice lists.
+              Review saved problems and drill into your attempt history across devices.
             </p>
           </div>
         </div>
       </header>
 
       <main className="mx-auto max-w-7xl px-6 py-8">
-        <Tabs
-          value={tab}
-          onValueChange={(value) => {
-            const tabValue = value as 'history' | 'saved';
-            setTab(tabValue);
-            navigate({
-              to: '/history',
-              search: (prev) => ({ ...prev, tab: tabValue === 'saved' ? 'saved' : undefined }),
-              replace: true,
-            });
-          }}
-          className="space-y-6"
-        >
+        <Tabs value={tab} onValueChange={handleTabChange} className="space-y-6">
           <TabsList>
             <TabsTrigger value="history" className="gap-2">
               <Clock className="h-4 w-4" aria-hidden="true" />
               History
             </TabsTrigger>
             <TabsTrigger value="saved" className="gap-2">
-              <Star className="h-4 w-4" aria-hidden="true" />
+              <History className="h-4 w-4" aria-hidden="true" />
               Saved
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="history" className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <p style={{ color: 'var(--fg-muted)' }}>
-                {attempts.length} total attempts · {attempts.filter((a) => a.passed).length} passed
+                {savedProblems.length} saved problem{savedProblems.length === 1 ? '' : 's'}
+                {latestUpdateSummary ? ` · Latest activity ${latestUpdateSummary}` : ''}
               </p>
-              <Button variant="outline" size="sm" className="gap-2">
-                <FolderOpen className="h-4 w-4" aria-hidden="true" />
-                Export Session
-              </Button>
             </div>
 
-            <div className="grid gap-4">
-              {attempts.map((attempt) => (
-                <Card key={attempt.id}>
-                  <CardHeader className="flex flex-row items-start justify-between gap-4 pb-3">
-                    <div className="space-y-2">
-                      <CardTitle>{attempt.problem_title}</CardTitle>
-                      <div className="flex flex-wrap items-center gap-2 text-sm">
-                        <Badge variant="outline" className="font-mono uppercase">
-                          {attempt.category}
-                        </Badge>
-                        <Badge
-                          variant="outline"
-                          className={difficultyTone[attempt.difficulty] ?? 'text-fg-muted'}
-                        >
-                          {attempt.difficulty}
-                        </Badge>
-                        {attempt.hint_used ? (
-                          <Badge variant="secondary" className="gap-1">
-                            <Eye className="h-3 w-3" aria-hidden="true" />
-                            Hint used
-                          </Badge>
-                        ) : null}
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col items-end gap-2">
-                      <div className="rounded-full px-3 py-1 text-sm font-medium">
-                        {attempt.passed ? (
-                          <span className="flex items-center gap-1 text-success-600">
-                            <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-                            Passed
-                          </span>
-                        ) : (
-                          <span className="flex items-center gap-1 text-danger-600">
-                            <XCircle className="h-4 w-4" aria-hidden="true" />
-                            Failed
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-sm" style={{ color: 'var(--fg-muted)' }}>
-                        {formatDate(attempt.ended_at)} · {formatDuration(attempt.duration_ms)}
-                      </div>
-                    </div>
-                  </CardHeader>
-
-                  <CardContent className="space-y-4">
-                    <Separator />
-                    <div className="flex flex-wrap items-center justify-between gap-4">
-                      <div
-                        className="flex items-center gap-4 text-sm"
-                        style={{ color: 'var(--fg-muted)' }}
-                      >
-                        <span className="flex items-center gap-1">
-                          <Calendar className="h-4 w-4" aria-hidden="true" />
-                          {new Date(attempt.started_at).toLocaleTimeString([], {
-                            hour: 'numeric',
-                            minute: '2-digit',
-                          })}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-4 w-4" aria-hidden="true" />
-                          {formatDuration(attempt.duration_ms)}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleViewAttempt(attempt.id)}
-                          className="gap-2"
-                        >
-                          <Eye className="h-4 w-4" aria-hidden="true" />
-                          View attempt
-                        </Button>
-                        <Button variant="outline" size="sm" className="gap-2">
-                          <BookMarked className="h-4 w-4" aria-hidden="true" />
-                          Save
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </TabsContent>
-
-          <TabsContent value="saved" className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <p style={{ color: 'var(--fg-muted)' }}>
-                Saved problems sync across devices. Curate lists to organise your practice.
-              </p>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant={savedFilter === 'all' ? 'primary' : 'outline'}
-                  size="sm"
-                  onClick={() => setSavedFilter('all')}
-                >
-                  All
-                </Button>
-                <Button
-                  variant={savedFilter === 'lists' ? 'primary' : 'outline'}
-                  size="sm"
-                  className="gap-2"
-                  onClick={() => setSavedFilter('lists')}
-                >
-                  <BookMarked className="h-4 w-4" aria-hidden="true" />
-                  Lists
-                </Button>
-                <Button variant="primary" size="sm" className="gap-2">
-                  <Plus className="h-4 w-4" aria-hidden="true" />
-                  New List
-                </Button>
-              </div>
-            </div>
-
-            {savedFilter === 'lists' ? (
-              <div className="grid gap-4 md:grid-cols-2">
-                {problemsByList.map(({ list, problems }) => (
-                  <Card key={list.id} className="flex flex-col gap-3 p-4">
-                    <div className="space-y-2">
-                      <h3 className="text-lg font-semibold">{list.name}</h3>
-                      <p className="text-sm" style={{ color: 'var(--fg-muted)' }}>
-                        {list.description}
-                      </p>
-                    </div>
-                    <div
-                      className="flex flex-wrap items-center gap-2 text-sm"
-                      style={{ color: 'var(--fg-muted)' }}
-                    >
-                      <span>
-                        {problems.length} problem{problems.length === 1 ? '' : 's'}
-                      </span>
-                      <span>Created {formatDate(list.created_at)}</span>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {problems.slice(0, 3).map((problem) => (
-                        <Badge key={problem.id} variant="secondary">
-                          {problem.problem_title}
-                        </Badge>
-                      ))}
-                      {problems.length > 3 ? (
-                        <Badge variant="outline">+{problems.length - 3} more</Badge>
-                      ) : null}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2 pt-2">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="gap-2"
-                        onClick={() => setSavedFilter('all')}
-                      >
-                        <BookMarked className="h-4 w-4" aria-hidden="true" />
-                        View problems
-                      </Button>
-                    </div>
-                  </Card>
-                ))}
-              </div>
+            {savedProblemsQuery.isLoading ? (
+              <LoadingState />
+            ) : savedProblemsQuery.isError ? (
+              <ErrorState
+                message={
+                  savedProblemsQuery.error instanceof Error
+                    ? savedProblemsQuery.error.message
+                    : 'Failed to load Practice Library.'
+                }
+                onRetry={() => savedProblemsQuery.refetch()}
+              />
+            ) : sortedByUpdated.length === 0 ? (
+              <EmptyState />
             ) : (
-              <ScrollArea className="max-h-[600px] rounded-lg border border-border-subtle">
-                <div className="divide-y divide-border-subtle">
-                  {savedProblems.map((problem) => (
-                    <SavedProblemRow
+              <>
+                <div className="space-y-4">
+                  {sortedByUpdated.map((problem) => (
+                    <SavedProblemCard
                       key={problem.id}
-                      problem={problem}
-                      lists={lists}
-                      onViewAttempt={() => handleViewAttempt(problem.id)}
+                      summary={problem}
+                      onViewAttempt={handleViewAttempt}
                     />
                   ))}
                 </div>
-              </ScrollArea>
+                <LoadMoreButton
+                  hasNextPage={Boolean(savedProblemsQuery.hasNextPage)}
+                  isFetchingNextPage={savedProblemsQuery.isFetchingNextPage}
+                  fetchNextPage={() => savedProblemsQuery.fetchNextPage()}
+                />
+              </>
+            )}
+          </TabsContent>
+
+          <TabsContent value="saved" className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p style={{ color: 'var(--fg-muted)' }}>
+                Manage the problems you have saved to revisit later.
+              </p>
+              <div className="flex items-center gap-2">
+                {STATUS_FILTERS.map((filter) => (
+                  <Button
+                    key={filter.value}
+                    variant={statusFilter === filter.value ? 'primary' : 'outline'}
+                    size="sm"
+                    onClick={() => setStatusFilter(filter.value)}
+                  >
+                    {filter.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <Separator />
+
+            {savedProblemsQuery.isLoading ? (
+              <LoadingState />
+            ) : savedProblemsQuery.isError ? (
+              <ErrorState
+                message={
+                  savedProblemsQuery.error instanceof Error
+                    ? savedProblemsQuery.error.message
+                    : 'Failed to load saved problems.'
+                }
+                onRetry={() => savedProblemsQuery.refetch()}
+              />
+            ) : filteredByStatus.length === 0 ? (
+              <EmptyState />
+            ) : (
+              <>
+                <div className="space-y-4">
+                  {filteredByStatus.map((problem) => (
+                    <SavedProblemCard
+                      key={problem.id}
+                      summary={problem}
+                      onViewAttempt={handleViewAttempt}
+                    />
+                  ))}
+                </div>
+                <LoadMoreButton
+                  hasNextPage={Boolean(savedProblemsQuery.hasNextPage)}
+                  isFetchingNextPage={savedProblemsQuery.isFetchingNextPage}
+                  fetchNextPage={() => savedProblemsQuery.fetchNextPage()}
+                />
+              </>
             )}
           </TabsContent>
         </Tabs>
@@ -333,75 +555,3 @@ export function PracticeLibraryPage() {
     </div>
   );
 }
-
-interface SavedProblemRowProps {
-  problem: SavedProblem;
-  lists: ProblemList[];
-  onViewAttempt: () => void;
-}
-
-const SavedProblemRow = ({ problem, lists, onViewAttempt }: SavedProblemRowProps) => {
-  const linkedLists = problem.lists
-    .map((listId) => lists.find((list) => list.id === listId))
-    .filter((list): list is ProblemList => Boolean(list));
-
-  return (
-    <div className="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between">
-      <div className="space-y-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <h3 className="text-base font-semibold">{problem.problem_title}</h3>
-          <Badge variant="outline" className="font-mono uppercase">
-            {problem.category}
-          </Badge>
-          <Badge
-            variant="outline"
-            className={difficultyTone[problem.difficulty] ?? 'text-fg-muted'}
-          >
-            {problem.difficulty}
-          </Badge>
-        </div>
-        <div
-          className="flex flex-wrap items-center gap-3 text-sm"
-          style={{ color: 'var(--fg-muted)' }}
-        >
-          <span>{relativeDate(problem.saved_at)}</span>
-          <span>Duration {formatDuration(problem.duration_ms)}</span>
-          {problem.hint_used ? (
-            <span className="flex items-center gap-1">
-              <Eye className="h-4 w-4" aria-hidden="true" />
-              Hint viewed
-            </span>
-          ) : null}
-        </div>
-        {linkedLists.length ? (
-          <div
-            className="flex flex-wrap items-center gap-2 text-sm"
-            style={{ color: 'var(--fg-muted)' }}
-          >
-            Lists:
-            {linkedLists.map((list) => (
-              <Badge key={list.id} variant="secondary">
-                {list.name}
-              </Badge>
-            ))}
-          </div>
-        ) : null}
-      </div>
-
-      <div className="flex flex-shrink-0 flex-wrap items-center gap-2">
-        <Button variant="ghost" size="sm" className="gap-2" onClick={onViewAttempt}>
-          <Eye className="h-4 w-4" aria-hidden="true" />
-          View
-        </Button>
-        <Button variant="outline" size="sm" className="gap-2">
-          <BookMarked className="h-4 w-4" aria-hidden="true" />
-          Add to list
-        </Button>
-        <Button variant="ghost" size="sm" className="gap-2 text-danger-600">
-          <Trash2 className="h-4 w-4" aria-hidden="true" />
-          Remove
-        </Button>
-      </div>
-    </div>
-  );
-};
