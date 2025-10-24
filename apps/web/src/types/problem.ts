@@ -52,6 +52,20 @@ export const TestSuiteSchema = z.object({
     hidden: z.array(ExampleSchema),
 });
 
+export const WorkspaceFileSchema = z.object({
+    code: z.string(),
+    hidden: z.boolean().optional(),
+});
+
+export const WorkspaceTemplateSchema = z.object({
+    entry: z.string(),
+    files: z.record(WorkspaceFileSchema),
+    dependencies: z.record(z.string()).optional(),
+    dev_dependencies: z.record(z.string()).optional(),
+    template: z.string().optional(),
+    environment: z.string().optional(),
+});
+
 export const ProblemPackSchema = z.object({
     problem: ProblemMetadataSchema,
     api: APISignatureSchema,
@@ -59,6 +73,8 @@ export const ProblemPackSchema = z.object({
     hint: z.string(),
     solutions: z.array(SolutionOutlineSchema),
     tests: TestSuiteSchema,
+    macro_category: z.enum(['dsa', 'frontend', 'system-design']),
+    workspace_template: WorkspaceTemplateSchema.optional(),
 });
 
 export const RunResultSchema = z.object({
@@ -95,6 +111,8 @@ export type ProblemMetadata = z.infer<typeof ProblemMetadataSchema>;
 export type SolutionOutline = z.infer<typeof SolutionOutlineSchema>;
 export type TestSuite = z.infer<typeof TestSuiteSchema>;
 export type ProblemPack = z.infer<typeof ProblemPackSchema>;
+export type WorkspaceTemplate = z.infer<typeof WorkspaceTemplateSchema>;
+export type WorkspaceFile = z.infer<typeof WorkspaceFileSchema>;
 export type RunResult = z.infer<typeof RunResultSchema>;
 export type Attempt = z.infer<typeof AttemptSchema>;
 
@@ -150,4 +168,3 @@ export interface TestResult {
     expected?: unknown;
     actual?: unknown;
 }
-

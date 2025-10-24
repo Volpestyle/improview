@@ -11,6 +11,8 @@ export const GenerateRequestSchema = z.object({
     customPrompt: z.string().optional(),
     provider: z.string().optional(),
     mode: z.enum(['static', 'llm']).optional(),
+    frontendFramework: z.string().optional(),
+    styling: z.string().optional(),
 });
 
 export const CreateAttemptRequestSchema = z.object({

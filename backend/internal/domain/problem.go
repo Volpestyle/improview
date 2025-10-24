@@ -56,14 +56,32 @@ type TestSuite struct {
 	Hidden []Example `json:"hidden"`
 }
 
+// WorkspaceFile represents a starter file within the interactive sandbox.
+type WorkspaceFile struct {
+	Code   string `json:"code"`
+	Hidden bool   `json:"hidden,omitempty"`
+}
+
+// WorkspaceTemplate defines the initial multi-file sandbox configuration.
+type WorkspaceTemplate struct {
+	Entry           string                   `json:"entry"`
+	Files           map[string]WorkspaceFile `json:"files"`
+	Dependencies    map[string]string        `json:"dependencies,omitempty"`
+	DevDependencies map[string]string        `json:"dev_dependencies,omitempty"`
+	Template        string                   `json:"template,omitempty"`
+	Environment     string                   `json:"environment,omitempty"`
+}
+
 // ProblemPack is the full payload returned by the LLM broker.
 type ProblemPack struct {
-	Problem          ProblemMetadata   `json:"problem"`
-	API              APISignature      `json:"api"`
-	TimeEstimateMins int               `json:"time_estimate_minutes"`
-	Hint             string            `json:"hint"`
-	Solutions        []SolutionOutline `json:"solutions"`
-	Tests            TestSuite         `json:"tests"`
+	Problem           ProblemMetadata    `json:"problem"`
+	API               APISignature       `json:"api"`
+	TimeEstimateMins  int                `json:"time_estimate_minutes"`
+	Hint              string             `json:"hint"`
+	Solutions         []SolutionOutline  `json:"solutions"`
+	Tests             TestSuite          `json:"tests"`
+	MacroCategory     string             `json:"macro_category"`
+	WorkspaceTemplate *WorkspaceTemplate `json:"workspace_template,omitempty"`
 }
 
 // Attempt captures stored attempt metadata.

@@ -10,6 +10,45 @@ import (
 	"improview/backend/internal/domain"
 )
 
+// categoryToMacroCategory maps specific categories to their macro categories.
+var categoryToMacroCategory = map[string]string{
+	// DSA categories
+	"arrays":        "dsa",
+	"bfs-dfs":       "dsa",
+	"maps-sets":     "dsa",
+	"dp":            "dsa",
+	"graphs":        "dsa",
+	"strings":       "dsa",
+	"math":          "dsa",
+	"heaps":         "dsa",
+	"two-pointers":  "dsa",
+
+	// Frontend categories
+	"react-components":  "frontend",
+	"css-layouts":       "frontend",
+	"accessibility":     "frontend",
+	"state-management":  "frontend",
+	"performance":       "frontend",
+	"forms-validation":  "frontend",
+
+	// System design categories
+	"scalability":     "system-design",
+	"databases":       "system-design",
+	"caching":         "system-design",
+	"load-balancing":  "system-design",
+	"microservices":   "system-design",
+	"api-design":      "system-design",
+}
+
+// getMacroCategory returns the macro category for a given specific category.
+// Returns "dsa" as default if category is not found.
+func getMacroCategory(category string) string {
+	if macro, ok := categoryToMacroCategory[strings.ToLower(category)]; ok {
+		return macro
+	}
+	return "dsa" // default fallback
+}
+
 // StaticProblemGenerator returns predefined problem packs for initial development.
 type StaticProblemGenerator struct {
 	packs map[string]domain.ProblemPack
@@ -120,6 +159,7 @@ func defaultProblemPacks() map[string]domain.ProblemPack {
 					{Input: []any{[][]int{{0, 1}, {0, 0}}}, Output: 3},
 				},
 			},
+			MacroCategory: getMacroCategory("bfs-dfs"),
 		},
 		"random:easy": {
 			Problem: domain.ProblemMetadata{
@@ -156,6 +196,7 @@ func defaultProblemPacks() map[string]domain.ProblemPack {
 				Public: []domain.Example{{Input: []any{[]int{1, 3, 4, 2}, 6}, Output: []int{1, 3}}},
 				Hidden: []domain.Example{{Input: []any{[]int{-1, -2, -3, -4, -5}, -8}, Output: []int{2, 4}}},
 			},
+			MacroCategory: "dsa", // default for random problems
 		},
 	}
 }
@@ -169,5 +210,27 @@ func cloneProblemPack(src domain.ProblemPack) domain.ProblemPack {
 	clone.Tests.Public = append([]domain.Example(nil), src.Tests.Public...)
 	clone.Tests.Hidden = append([]domain.Example(nil), src.Tests.Hidden...)
 	clone.API.Params = append([]domain.APIParam(nil), src.API.Params...)
+	if src.WorkspaceTemplate != nil {
+		tmpl := *src.WorkspaceTemplate
+		if src.WorkspaceTemplate.Files != nil {
+			tmpl.Files = make(map[string]domain.WorkspaceFile, len(src.WorkspaceTemplate.Files))
+			for path, file := range src.WorkspaceTemplate.Files {
+				tmpl.Files[path] = file
+			}
+		}
+		if src.WorkspaceTemplate.Dependencies != nil {
+			tmpl.Dependencies = make(map[string]string, len(src.WorkspaceTemplate.Dependencies))
+			for dep, version := range src.WorkspaceTemplate.Dependencies {
+				tmpl.Dependencies[dep] = version
+			}
+		}
+		if src.WorkspaceTemplate.DevDependencies != nil {
+			tmpl.DevDependencies = make(map[string]string, len(src.WorkspaceTemplate.DevDependencies))
+			for dep, version := range src.WorkspaceTemplate.DevDependencies {
+				tmpl.DevDependencies[dep] = version
+			}
+		}
+		clone.WorkspaceTemplate = &tmpl
+	}
 	return clone
 }

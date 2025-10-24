@@ -4,12 +4,14 @@ import "improview/backend/internal/domain"
 
 // GenerateRequest receives category/difficulty selection from the frontend.
 type GenerateRequest struct {
-	Category     string             `json:"category"`
-	Difficulty   string             `json:"difficulty"`
-	CustomPrompt string             `json:"customPrompt,omitempty"`
-	Provider     string             `json:"provider,omitempty"`
-	Mode         string             `json:"mode,omitempty"`
-	LLM          *LLMRequestOptions `json:"llm,omitempty"`
+	Category          string             `json:"category"`
+	Difficulty        string             `json:"difficulty"`
+	CustomPrompt      string             `json:"customPrompt,omitempty"`
+	Provider          string             `json:"provider,omitempty"`
+	Mode              string             `json:"mode,omitempty"`
+	FrontendFramework string             `json:"frontendFramework,omitempty"`
+	Styling           string             `json:"styling,omitempty"`
+	LLM               *LLMRequestOptions `json:"llm,omitempty"`
 }
 
 // GenerateResponse mirrors the ProblemPack contract.
