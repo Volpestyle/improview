@@ -51,13 +51,6 @@ jobs:
         run: pnpm build
       - name: Verify frontend build output
         run: test -d apps/web/dist
-      - name: Upload build artifact
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: web-dist
-          path: apps/web/dist
-          if-no-files-found: error
 
   deploy:
     name: Deploy to AWS
@@ -115,16 +108,10 @@ jobs:
         run: npm install -g aws-cdk@2
       - name: Install dependencies
         if: steps.deployment_guard.outputs.should_deploy == 'true'
-        run: pnpm install --dir infra/cdk
+        run: pnpm install --frozen-lockfile
       - name: Build application
         if: steps.deployment_guard.outputs.should_deploy == 'true'
         run: pnpm --dir infra/cdk run build
-      - name: Download frontend build artifact
-        if: steps.deployment_guard.outputs.should_deploy == 'true'
-        uses: actions/download-artifact@v4
-        with:
-          name: web-dist
-          path: .
       - name: Configure AWS credentials via OIDC
         if: steps.deployment_guard.outputs.should_deploy == 'true' && env.AWS_ROLE_TO_ASSUME != ''
         uses: aws-actions/configure-aws-credentials@v4
@@ -138,17 +125,6 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION != '' && env.AWS_REGION || 'us-east-1' }}
-      - name: Sync static assets to S3
-        if: steps.deployment_guard.outputs.should_deploy == 'true' && env.S3_BUCKET != ''
-        run: |
-          build_dir="${FRONTEND_BUILD_DIR:-apps/web/dist}"
-          if [ ! -d "$build_dir" ] && [ -d dist ]; then
-            build_dir=dist
-          fi
-          aws s3 sync "$build_dir" "s3://$S3_BUCKET" --delete
-      - name: Invalidate CloudFront cache
-        if: steps.deployment_guard.outputs.should_deploy == 'true' && env.CLOUDFRONT_DISTRIBUTION_ID != ''
-        run: aws cloudfront create-invalidation --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" --paths "/*"
       - name: Deploy serverless services
         if: steps.deployment_guard.outputs.should_deploy == 'true'
         run: pnpm --dir infra/cdk run deploy:services -- --env "${IMPROVIEW_ENV:-dev}"
@@ -194,6 +170,11 @@ jobs:
             --stack-name "${auth_stack}" \
             --query "Stacks[0].Outputs[?OutputKey=='UserPoolClientId'].OutputValue" \
             --output text)"
+          domain="$(aws cloudformation describe-stacks \
+            --region "${region}" \
+            --stack-name "${auth_stack}" \
+            --query "Stacks[0].Outputs[?OutputKey=='UserPoolDomain'].OutputValue" \
+            --output text)"
           if [ -z "${user_pool_id}" ] || [ "${user_pool_id}" = "None" ]; then
             echo "UserPoolId output missing for ${auth_stack}." >&2
             exit 1
@@ -202,12 +183,18 @@ jobs:
             echo "UserPoolClientId output missing for ${auth_stack}." >&2
             exit 1
           fi
+          if [ -z "${domain}" ] || [ "${domain}" = "None" ]; then
+            echo "UserPoolDomain output missing for ${auth_stack}." >&2
+            exit 1
+          fi
           echo "Resolved Cognito User Pool: ${user_pool_id}"
           echo "Resolved Cognito Client: ${client_id}"
+          echo "Resolved Cognito Domain: ${domain}"
           {
             echo "USER_POOL_ID=${user_pool_id}"
             echo "USER_POOL_CLIENT_ID=${client_id}"
             echo "USER_POOL_CLIENT_IDS=${client_id}"
+            echo "USER_POOL_DOMAIN=${domain}"
             echo "COGNITO_USER_POOL_ID=${user_pool_id}"
             echo "COGNITO_APP_CLIENT_IDS=${client_id}"
           } >> "${GITHUB_ENV}"
@@ -250,6 +237,45 @@ jobs:
             echo "CLOUDFRONT_DISTRIBUTION_ID=${distribution_id}"
             echo "CLOUDFRONT_DOMAIN=${distribution_domain}"
           } >> "${GITHUB_ENV}"
+      - name: Resolve API endpoint
+        id: resolve_api_endpoint
+        if: steps.deployment_guard.outputs.should_deploy == 'true'
+        run: |
+          env_name="${IMPROVIEW_ENV:-dev}"
+          region="${AWS_REGION:-us-east-1}"
+          stack_name="Improview-${env_name}-Backend"
+          echo "Resolving ApiEndpoint from ${stack_name} in ${region}..."
+          endpoint=$(aws cloudformation describe-stacks \
+            --region "${region}" \
+            --stack-name "${stack_name}" \
+            --query 'Stacks[0].Outputs[?OutputKey==`ApiEndpoint`].OutputValue' \
+            --output text)
+          if [ -z "${endpoint}" ] || [ "${endpoint}" = "None" ]; then
+            echo "Failed to resolve ApiEndpoint output for ${stack_name}." >&2
+            exit 1
+          fi
+          echo "Resolved ApiEndpoint: ${endpoint}"
+          echo "BASE_URL=${endpoint}" >> "${GITHUB_ENV}"
+          echo "base_url=${endpoint}" >> "${GITHUB_OUTPUT}"
+      - name: Build frontend assets
+        if: steps.deployment_guard.outputs.should_deploy == 'true' && steps.resolve_api_endpoint.outputs.base_url != ''
+        run: |
+          VITE_API_BASE_URL="${BASE_URL}" \
+          VITE_AUTH_DOMAIN="${USER_POOL_DOMAIN}" \
+          VITE_AUTH_CLIENT_ID="${USER_POOL_CLIENT_ID}" \
+          VITE_API_MODE="llm" \
+          pnpm --filter improview-web... build
+      - name: Sync static assets to S3
+        if: steps.deployment_guard.outputs.should_deploy == 'true' && steps.resolve_api_endpoint.outputs.base_url != '' && env.S3_BUCKET != ''
+        run: |
+          build_dir="${FRONTEND_BUILD_DIR:-apps/web/dist}"
+          if [ ! -d "$build_dir" ] && [ -d dist ]; then
+            build_dir=dist
+          fi
+          aws s3 sync "$build_dir" "s3://$S3_BUCKET" --delete
+      - name: Invalidate CloudFront cache
+        if: steps.deployment_guard.outputs.should_deploy == 'true' && steps.resolve_api_endpoint.outputs.base_url != '' && env.CLOUDFRONT_DISTRIBUTION_ID != ''
+        run: aws cloudfront create-invalidation --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" --paths "/*"
       - name: Ensure smoke-test Cognito user
         if: steps.deployment_guard.outputs.should_deploy == 'true'
         env:
@@ -271,26 +297,6 @@ jobs:
           args+=(--secret-name "${SMOKE_SECRET_NAME}")
           args+=(--description "${SMOKE_SECRET_DESCRIPTION}")
           ./backend/scripts/setup-smoke-user.sh "${args[@]}"
-      - name: Resolve API endpoint
-        id: resolve_api_endpoint
-        if: steps.deployment_guard.outputs.should_deploy == 'true'
-        run: |
-          env_name="${IMPROVIEW_ENV:-dev}"
-          region="${AWS_REGION:-us-east-1}"
-          stack_name="Improview-${env_name}-Backend"
-          echo "Resolving ApiEndpoint from ${stack_name} in ${region}..."
-          endpoint=$(aws cloudformation describe-stacks \
-            --region "${region}" \
-            --stack-name "${stack_name}" \
-            --query 'Stacks[0].Outputs[?OutputKey==`ApiEndpoint`].OutputValue' \
-            --output text)
-          if [ -z "${endpoint}" ] || [ "${endpoint}" = "None" ]; then
-            echo "Failed to resolve ApiEndpoint output for ${stack_name}." >&2
-            exit 1
-          fi
-          echo "Resolved ApiEndpoint: ${endpoint}"
-          echo "BASE_URL=${endpoint}" >> "${GITHUB_ENV}"
-          echo "base_url=${endpoint}" >> "${GITHUB_OUTPUT}"
       - name: Set writable Go build cache
         if: steps.deployment_guard.outputs.should_deploy == 'true' && steps.resolve_api_endpoint.outputs.base_url != ''
         run: |
@@ -365,16 +371,10 @@ jobs:
         run: npm install -g aws-cdk@2
       - name: Install dependencies
         if: steps.dev_deployment_guard.outputs.should_deploy == 'true'
-        run: pnpm install --dir infra/cdk
+        run: pnpm install --frozen-lockfile
       - name: Build application
         if: steps.dev_deployment_guard.outputs.should_deploy == 'true'
         run: pnpm --dir infra/cdk run build
-      - name: Download frontend build artifact
-        if: steps.dev_deployment_guard.outputs.should_deploy == 'true'
-        uses: actions/download-artifact@v4
-        with:
-          name: web-dist
-          path: .
       - name: Configure AWS credentials via OIDC
         if: steps.dev_deployment_guard.outputs.should_deploy == 'true' && env.AWS_ROLE_TO_ASSUME != ''
         uses: aws-actions/configure-aws-credentials@v4
@@ -388,17 +388,6 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION != '' && env.AWS_REGION || 'us-east-1' }}
-      - name: Sync static assets to S3
-        if: steps.dev_deployment_guard.outputs.should_deploy == 'true' && env.S3_BUCKET != ''
-        run: |
-          build_dir="${FRONTEND_BUILD_DIR:-apps/web/dist}"
-          if [ ! -d "$build_dir" ] && [ -d dist ]; then
-            build_dir=dist
-          fi
-          aws s3 sync "$build_dir" "s3://$S3_BUCKET" --delete
-      - name: Invalidate CloudFront cache
-        if: steps.dev_deployment_guard.outputs.should_deploy == 'true' && env.CLOUDFRONT_DISTRIBUTION_ID != ''
-        run: aws cloudfront create-invalidation --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" --paths "/*"
       - name: Deploy serverless services
         if: steps.dev_deployment_guard.outputs.should_deploy == 'true'
         run: pnpm --dir infra/cdk run deploy:services -- --env "${IMPROVIEW_ENV:-dev}"
@@ -444,6 +433,11 @@ jobs:
             --stack-name "${auth_stack}" \
             --query "Stacks[0].Outputs[?OutputKey=='UserPoolClientId'].OutputValue" \
             --output text)"
+          domain="$(aws cloudformation describe-stacks \
+            --region "${region}" \
+            --stack-name "${auth_stack}" \
+            --query "Stacks[0].Outputs[?OutputKey=='UserPoolDomain'].OutputValue" \
+            --output text)"
           if [ -z "${user_pool_id}" ] || [ "${user_pool_id}" = "None" ]; then
             echo "UserPoolId output missing for ${auth_stack}." >&2
             exit 1
@@ -452,12 +446,18 @@ jobs:
             echo "UserPoolClientId output missing for ${auth_stack}." >&2
             exit 1
           fi
+          if [ -z "${domain}" ] || [ "${domain}" = "None" ]; then
+            echo "UserPoolDomain output missing for ${auth_stack}." >&2
+            exit 1
+          fi
           echo "Resolved Cognito User Pool: ${user_pool_id}"
           echo "Resolved Cognito Client: ${client_id}"
+          echo "Resolved Cognito Domain: ${domain}"
           {
             echo "USER_POOL_ID=${user_pool_id}"
             echo "USER_POOL_CLIENT_ID=${client_id}"
             echo "USER_POOL_CLIENT_IDS=${client_id}"
+            echo "USER_POOL_DOMAIN=${domain}"
             echo "COGNITO_USER_POOL_ID=${user_pool_id}"
             echo "COGNITO_APP_CLIENT_IDS=${client_id}"
           } >> "${GITHUB_ENV}"
@@ -500,6 +500,45 @@ jobs:
             echo "CLOUDFRONT_DISTRIBUTION_ID=${distribution_id}"
             echo "CLOUDFRONT_DOMAIN=${distribution_domain}"
           } >> "${GITHUB_ENV}"
+      - name: Resolve API endpoint
+        id: resolve_api_endpoint
+        if: steps.dev_deployment_guard.outputs.should_deploy == 'true'
+        run: |
+          env_name="${IMPROVIEW_ENV:-dev}"
+          region="${AWS_REGION:-us-east-1}"
+          stack_name="Improview-${env_name}-Backend"
+          echo "Resolving ApiEndpoint from ${stack_name} in ${region}..."
+          endpoint=$(aws cloudformation describe-stacks \
+            --region "${region}" \
+            --stack-name "${stack_name}" \
+            --query 'Stacks[0].Outputs[?OutputKey==`ApiEndpoint`].OutputValue' \
+            --output text)
+          if [ -z "${endpoint}" ] || [ "${endpoint}" = "None" ]; then
+            echo "Failed to resolve ApiEndpoint output for ${stack_name}." >&2
+            exit 1
+          fi
+          echo "Resolved ApiEndpoint: ${endpoint}"
+          echo "BASE_URL=${endpoint}" >> "${GITHUB_ENV}"
+          echo "base_url=${endpoint}" >> "${GITHUB_OUTPUT}"
+      - name: Build frontend assets
+        if: steps.dev_deployment_guard.outputs.should_deploy == 'true' && steps.resolve_api_endpoint.outputs.base_url != ''
+        run: |
+          VITE_API_BASE_URL="${BASE_URL}" \
+          VITE_AUTH_DOMAIN="${USER_POOL_DOMAIN}" \
+          VITE_AUTH_CLIENT_ID="${USER_POOL_CLIENT_ID}" \
+          VITE_API_MODE="llm" \
+          pnpm --filter improview-web... build
+      - name: Sync static assets to S3
+        if: steps.dev_deployment_guard.outputs.should_deploy == 'true' && steps.resolve_api_endpoint.outputs.base_url != '' && env.S3_BUCKET != ''
+        run: |
+          build_dir="${FRONTEND_BUILD_DIR:-apps/web/dist}"
+          if [ ! -d "$build_dir" ] && [ -d dist ]; then
+            build_dir=dist
+          fi
+          aws s3 sync "$build_dir" "s3://$S3_BUCKET" --delete
+      - name: Invalidate CloudFront cache
+        if: steps.dev_deployment_guard.outputs.should_deploy == 'true' && steps.resolve_api_endpoint.outputs.base_url != '' && env.CLOUDFRONT_DISTRIBUTION_ID != ''
+        run: aws cloudfront create-invalidation --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" --paths "/*"
       - name: Ensure smoke-test Cognito user
         if: steps.dev_deployment_guard.outputs.should_deploy == 'true'
         env:
@@ -521,26 +560,6 @@ jobs:
           args+=(--secret-name "${SMOKE_SECRET_NAME}")
           args+=(--description "${SMOKE_SECRET_DESCRIPTION}")
           ./backend/scripts/setup-smoke-user.sh "${args[@]}"
-      - name: Resolve API endpoint
-        id: resolve_api_endpoint
-        if: steps.dev_deployment_guard.outputs.should_deploy == 'true'
-        run: |
-          env_name="${IMPROVIEW_ENV:-dev}"
-          region="${AWS_REGION:-us-east-1}"
-          stack_name="Improview-${env_name}-Backend"
-          echo "Resolving ApiEndpoint from ${stack_name} in ${region}..."
-          endpoint=$(aws cloudformation describe-stacks \
-            --region "${region}" \
-            --stack-name "${stack_name}" \
-            --query 'Stacks[0].Outputs[?OutputKey==`ApiEndpoint`].OutputValue' \
-            --output text)
-          if [ -z "${endpoint}" ] || [ "${endpoint}" = "None" ]; then
-            echo "Failed to resolve ApiEndpoint output for ${stack_name}." >&2
-            exit 1
-          fi
-          echo "Resolved ApiEndpoint: ${endpoint}"
-          echo "BASE_URL=${endpoint}" >> "${GITHUB_ENV}"
-          echo "base_url=${endpoint}" >> "${GITHUB_OUTPUT}"
       - name: Set writable Go build cache
         if: steps.dev_deployment_guard.outputs.should_deploy == 'true' && steps.resolve_api_endpoint.outputs.base_url != ''
         run: |

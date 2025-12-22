@@ -23,6 +23,11 @@ Go application that powers the Improview API. This README covers local developme
    go run ./cmd/api
    ```
 
+## Environment Files
+
+- Backend local defaults live in `backend/.env.local`; production-like overrides belong in `backend/.env.production`.
+- Frontend env files live in `apps/web/.env.local` and `apps/web/.env.production` and are baked into the Vite build.
+
 ## Scripts
 
 - `pnpm backend:serve:local` — Run the API with `backend/.env.local`.
@@ -46,25 +51,39 @@ When `OPENAI_API_KEY` is present the live LLM generator becomes available. Stati
 
 ### Environment Variables
 
-| Variable | Description | Required |
-| --- | --- | --- |
-| `OPENAI_API_KEY` | API key that enables live LLM-backed generation. | Yes (llm) |
-| `OPENAI_MODEL` | Model name (defaults to `gpt-4.1-mini`). | No |
-| `OPENAI_BASE_URL` | Override base URL (`https://api.openai.com/v1` by default). | No |
-| `OPENAI_PROVIDER` | Optional label recorded with requests. | No |
-| `OPENAI_TIMEOUT_SECONDS` | Request timeout in seconds (defaults to `25`). | No |
-| `OPENAI_TEMPERATURE` | Sampling temperature (defaults to `0.2`). | No |
+| Variable                 | Description                                                 | Required  |
+| ------------------------ | ----------------------------------------------------------- | --------- |
+| `OPENAI_API_KEY`         | API key that enables live LLM-backed generation.            | Yes (llm) |
+| `OPENAI_API_KEYS`        | Comma-separated OpenAI keys for pooling.                    | No        |
+| `OPENAI_MODEL`           | Model name (defaults to `gpt-4.1-mini`).                    | No        |
+| `OPENAI_BASE_URL`        | Override base URL (`https://api.openai.com/v1` by default). | No        |
+| `OPENAI_PROVIDER`        | Optional label recorded with requests.                      | No        |
+| `OPENAI_TIMEOUT_SECONDS` | Request timeout in seconds (defaults to `25`).              | No        |
+| `OPENAI_TEMPERATURE`     | Sampling temperature (defaults to `0.2`).                   | No        |
+
+#### Provider Catalog
+
+The `/api/models` endpoint proxies the llmhub `/provider-models` handler. It responds only when at least one provider is configured (otherwise you will see `501 Not Implemented`) and returns the normalized `ModelMetadata` list produced by llmhub. When the registry is unavailable the client leaves the selector empty so the issue is visible immediately.
+
+| Variable            | Description                                                                               | Required |
+| ------------------- | ----------------------------------------------------------------------------------------- | -------- |
+| `GROK_API_KEY`      | Enables Grok (xAI) model discovery via `https://api.x.ai/v1/models`.                      | No       |
+| `GROK_API_KEYS`     | Comma-separated Grok keys for pooling.                                                    | No       |
+| `ANTHROPIC_API_KEY` | Enables Anthropic model discovery via `https://api.anthropic.com/v1/models`.              | No       |
+| `ANTHROPIC_API_KEYS`| Comma-separated Anthropic keys for pooling.                                               | No       |
+| `GOOGLE_API_KEY`    | Enables Gemini model discovery via `https://generativelanguage.googleapis.com/v1/models`. | No       |
+| `GOOGLE_API_KEYS`   | Comma-separated Gemini keys for pooling.                                                  | No       |
 
 #### Authentication
 
-| Variable | Description | Required |
-| --- | --- | --- |
-| `USER_POOL_ID` | Cognito User Pool ID. Enabling this turns auth on. | Yes (secured) |
-| `USER_POOL_CLIENT_ID` | Primary Cognito App Client ID allowed to call the API. | Yes (secured) |
-| `USER_POOL_CLIENT_IDS` | Additional comma-separated client IDs (optional). | No |
-| `COGNITO_REGION` | Override region parsed from the pool ID. | No |
-| `COGNITO_JWKS_URL` | Custom JWKS URL (defaults to Cognito discovery). | No |
-| `COGNITO_JWKS_CACHE_TTL_SECONDS` | Cache TTL for downloaded JWKS keys. | No |
+| Variable                         | Description                                            | Required      |
+| -------------------------------- | ------------------------------------------------------ | ------------- |
+| `USER_POOL_ID`                   | Cognito User Pool ID. Enabling this turns auth on.     | Yes (secured) |
+| `USER_POOL_CLIENT_ID`            | Primary Cognito App Client ID allowed to call the API. | Yes (secured) |
+| `USER_POOL_CLIENT_IDS`           | Additional comma-separated client IDs (optional).      | No            |
+| `COGNITO_REGION`                 | Override region parsed from the pool ID.               | No            |
+| `COGNITO_JWKS_URL`               | Custom JWKS URL (defaults to Cognito discovery).       | No            |
+| `COGNITO_JWKS_CACHE_TTL_SECONDS` | Cache TTL for downloaded JWKS keys.                    | No            |
 
 > The CDK stack automatically injects `USER_POOL_ID`, `USER_POOL_CLIENT_ID`, and `PROVIDER_SECRET_ARN` into the Lambda runtime, so deployed stacks stay authenticated without extra configuration. Legacy variables prefixed with `COGNITO_` are still honoured for backward compatibility.
 

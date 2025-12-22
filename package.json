@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "dotenvx run -f apps/web/.env.local -- pnpm --filter improview-web dev",
-    "dev:live": "dotenvx run -f apps/web/.env.dev -- pnpm --filter improview-web dev",
+    "dev:live": "dotenvx run -f apps/web/.env.production -- pnpm --filter improview-web dev",
     "build": "pnpm -r run build",
     "lint": "pnpm -r run lint",
     "test": "pnpm -r run test",
@@ -17,7 +17,9 @@
     "storybook": "pnpm --filter @improview/ui storybook",
     "backend:serve:local": "dotenvx run -f backend/.env.local -- sh -c 'cd backend && go run ./cmd/api'",
     "backend:smoke:local": "dotenvx run -f backend/.env.local -- ./backend/scripts/run-smoke.sh --local --base-url http://localhost:8080 --debug",
+    "backend:smoke:local:static": "dotenvx run -f backend/.env.local -- ./backend/scripts/run-smoke.sh --local --base-url http://localhost:8080 --debug --mode static",
     "backend:smoke:dev": "dotenvx run -f backend/.env.local -- ./backend/scripts/run-smoke.sh --env dev --debug",
+    "backend:smoke:dev:static": "dotenvx run -f backend/.env.local -- ./backend/scripts/run-smoke.sh --env dev --debug --mode static",
     "backend:smoke:setup": "dotenvx run -f backend/.env.local -- ./backend/scripts/setup-smoke-user.sh",
     "sync:env": "node ./scripts/sync-env-to-github.js",
     "scripts:verify": "./scripts/check-scripts.sh"
