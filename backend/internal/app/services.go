@@ -11,6 +11,8 @@ import (
 
 	"improview/backend/internal/api"
 	"improview/backend/internal/auth"
+
+	llmhub "github.com/Volpestyle/llmhub/packages/go"
 )
 
 // GeneratorMode selects which problem generator backend to use.
@@ -31,19 +33,33 @@ type ServicesOptions struct {
 
 // LLMOptions holds configuration for the remote LLM generator.
 type LLMOptions struct {
-	APIKey      string
-	BaseURL     string
-	Model       string
-	Provider    string
-	Temperature float64
-	Timeout     time.Duration
-	HTTPClient  *http.Client
+	APIKey              string
+	APIKeys             []string
+	BaseURL             string
+	Model               string
+	Provider            string
+	Temperature         float64
+	Timeout             time.Duration
+	HTTPClient          *http.Client
+	AdditionalProviders map[string]LLMProviderOptions
+}
+
+// LLMProviderOptions describes credentials and defaults for an extra provider.
+type LLMProviderOptions struct {
+	APIKey   string
+	APIKeys  []string
+	BaseURL  string
+	Model    string
+	Provider string
 }
 
 const (
-	defaultLLMTimeout = 25 * time.Second
-	defaultLLMBaseURL = "https://api.openai.com/v1"
-	defaultLLMModel   = "gpt-4.1-mini"
+	defaultLLMTimeout       = 25 * time.Second
+	defaultLLMBaseURL       = "https://api.openai.com/v1"
+	defaultLLMModel         = "gpt-4.1-mini"
+	defaultAnthropicBaseURL = "https://api.anthropic.com/v1"
+	defaultGrokBaseURL      = "https://api.x.ai/v1"
+	defaultGoogleBaseURL    = "https://generativelanguage.googleapis.com/v1beta"
 )
 
 // NewInMemoryServices wires together a fully in-memory implementation of the API services.
@@ -59,6 +75,7 @@ func NewInMemoryServices(clock api.Clock) api.Services {
 //
 // Recognised variables:
 //   - OPENAI_API_KEY: required when using the LLM generator
+//   - OPENAI_API_KEYS: optional comma-separated OpenAI keys for pooling
 //   - OPENAI_MODEL: overrides the default OpenAI model
 //   - OPENAI_BASE_URL: overrides the OpenAI API base URL
 //   - OPENAI_PROVIDER: optional label recorded in prompts
@@ -142,14 +159,48 @@ func parseLLMOptionsFromEnv() LLMOptions {
 		}
 	}
 
-	return LLMOptions{
-		APIKey:      strings.TrimSpace(os.Getenv("OPENAI_API_KEY")),
-		BaseURL:     defaultString(os.Getenv("OPENAI_BASE_URL"), defaultLLMBaseURL),
-		Model:       defaultString(os.Getenv("OPENAI_MODEL"), defaultLLMModel),
-		Provider:    strings.TrimSpace(os.Getenv("OPENAI_PROVIDER")),
-		Temperature: temperature,
-		Timeout:     timeout,
+	extras := make(map[string]LLMProviderOptions)
+	if opt, ok := parseAdditionalProviderFromEnv("GROK", defaultGrokBaseURL, "Grok"); ok {
+		extras["grok"] = opt
 	}
+	if opt, ok := parseAdditionalProviderFromEnv("ANTHROPIC", defaultAnthropicBaseURL, "Anthropic Claude"); ok {
+		extras["anthropic"] = opt
+	}
+	if opt, ok := parseAdditionalProviderFromEnv("GOOGLE", defaultGoogleBaseURL, "Google Gemini"); ok {
+		extras["google"] = opt
+	}
+	if len(extras) == 0 {
+		extras = nil
+	}
+
+	return LLMOptions{
+		APIKey:              strings.TrimSpace(os.Getenv("OPENAI_API_KEY")),
+		APIKeys:             splitCSV(os.Getenv("OPENAI_API_KEYS")),
+		BaseURL:             defaultString(os.Getenv("OPENAI_BASE_URL"), defaultLLMBaseURL),
+		Model:               defaultString(os.Getenv("OPENAI_MODEL"), defaultLLMModel),
+		Provider:            strings.TrimSpace(os.Getenv("OPENAI_PROVIDER")),
+		Temperature:         temperature,
+		Timeout:             timeout,
+		AdditionalProviders: extras,
+	}
+}
+
+func parseAdditionalProviderFromEnv(prefix, defaultBaseURL, defaultLabel string) (LLMProviderOptions, bool) {
+	apiKey := strings.TrimSpace(os.Getenv(prefix + "_API_KEY"))
+	apiKeys := splitCSV(os.Getenv(prefix + "_API_KEYS"))
+	if apiKey == "" && len(apiKeys) == 0 {
+		return LLMProviderOptions{}, false
+	}
+	baseURL := defaultString(os.Getenv(prefix+"_BASE_URL"), defaultBaseURL)
+	model := strings.TrimSpace(os.Getenv(prefix + "_MODEL"))
+	label := defaultString(os.Getenv(prefix+"_PROVIDER"), defaultLabel)
+	return LLMProviderOptions{
+		APIKey:   apiKey,
+		APIKeys:  apiKeys,
+		BaseURL:  baseURL,
+		Model:    model,
+		Provider: label,
+	}, true
 }
 
 func defaultString(value, fallback string) string {
@@ -215,12 +266,14 @@ func newServices(clock api.Clock, options ServicesOptions) (api.Services, error)
 	staticGenerator := NewStaticProblemGenerator()
 
 	var llmGenerator api.ProblemGenerator
-	if strings.TrimSpace(options.LLM.APIKey) != "" {
+	var llmHubGenerator *LLMProblemGenerator
+	if len(normalizeAPIKeys(options.LLM.APIKey, options.LLM.APIKeys)) > 0 {
 		var err error
-		llmGenerator, err = NewLLMProblemGenerator(options.LLM)
+		llmHubGenerator, err = NewLLMProblemGenerator(options.LLM)
 		if err != nil {
 			return api.Services{}, err
 		}
+		llmGenerator = llmHubGenerator
 	}
 
 	defaultMode := options.GeneratorMode
@@ -242,8 +295,12 @@ func newServices(clock api.Clock, options ServicesOptions) (api.Services, error)
 
 	problems := NewMemoryProblemRepository()
 	attempts := NewMemoryAttemptStore(clock)
-	runner := SimpleTestRunner{}
+	runner := JavaScriptRunner{Problems: problems, Attempts: attempts}
 	submission := SubmissionService{Runner: runner, Attempts: attempts}
+	var llmHubInstance *llmhub.Hub
+	if llmHubGenerator != nil {
+		llmHubInstance = llmHubGenerator.Hub()
+	}
 
 	var profiles api.UserProfileStore
 	var savedProblems api.SavedProblemStore = NewMemorySavedProblemStore(clock)
@@ -264,6 +321,7 @@ func newServices(clock api.Clock, options ServicesOptions) (api.Services, error)
 		SavedProblems: savedProblems,
 		Tests:         runner,
 		Submission:    submission,
+		LLMHub:        llmHubInstance,
 		Health:        nil,
 		Clock:         clock,
 	}, nil

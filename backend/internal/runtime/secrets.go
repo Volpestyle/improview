@@ -18,6 +18,9 @@ var envKeys = []string{
 	"OPENAI_BASE_URL",
 	"OPENAI_MODEL",
 	"OPENAI_PROVIDER",
+	"GROK_API_KEY",
+	"ANTHROPIC_API_KEY",
+	"GOOGLE_API_KEY",
 }
 
 // LoadLLMEnvFromSecret pulls provider credentials from Secrets Manager when they are not
@@ -103,6 +106,15 @@ func parseProviderSecret(secret string) (map[string]string, error) {
 	}
 	if val, ok := stringValue(payload["openaiProvider"]); ok {
 		results["OPENAI_PROVIDER"] = val
+	}
+	if val, ok := stringValue(payload["grokApiKey"]); ok {
+		results["GROK_API_KEY"] = val
+	}
+	if val, ok := stringValue(payload["anthropicApiKey"]); ok {
+		results["ANTHROPIC_API_KEY"] = val
+	}
+	if val, ok := stringValue(payload["googleApiKey"]); ok {
+		results["GOOGLE_API_KEY"] = val
 	}
 
 	return results, nil

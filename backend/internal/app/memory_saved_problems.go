@@ -252,6 +252,9 @@ func (s *MemorySavedProblemStore) AppendAttempt(ctx context.Context, userID, sav
 	if strings.TrimSpace(userID) == "" || strings.TrimSpace(savedProblemID) == "" || strings.TrimSpace(input.AttemptID) == "" {
 		return domain.SavedAttemptSnapshot{}, api.ErrBadRequest
 	}
+	if err := validateSavedAttemptCode(input.Code); err != nil {
+		return domain.SavedAttemptSnapshot{}, err
+	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -277,7 +280,6 @@ func (s *MemorySavedProblemStore) AppendAttempt(ctx context.Context, userID, sav
 		SubmittedAt: input.SubmittedAt,
 		RuntimeMS:   input.RuntimeMS,
 		Code:        input.Code,
-		CodeS3Key:   input.CodeS3Key,
 	}
 
 	detail.Attempts = append([]domain.SavedAttemptSnapshot{snapshot}, detail.Attempts...)

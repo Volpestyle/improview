@@ -3,6 +3,7 @@ package api_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -150,7 +151,7 @@ func TestGenerateReturnsProblemPack(t *testing.T) {
 func TestAttemptLifecycle(t *testing.T) {
 	server := setupServer(t)
 
-	genReq := httptest.NewRequest(http.MethodPost, "/api/generate", strings.NewReader(`{"category":"bfs","difficulty":"easy"}`))
+	genReq := httptest.NewRequest(http.MethodPost, "/api/generate", strings.NewReader(`{"category":"random","difficulty":"easy"}`))
 	genReq.Header.Set("Content-Type", "application/json")
 	genRec := httptest.NewRecorder()
 	server.Handler().ServeHTTP(genRec, genReq)
@@ -171,7 +172,10 @@ func TestAttemptLifecycle(t *testing.T) {
 		t.Fatalf("create attempt returned %d", attemptRec.Code)
 	}
 
-	runReqBody := `{"attempt_id":"` + getAttemptID(t, attemptRec.Body.Bytes()) + `","code":"function solution(){ return 42; }","which":"public"}`
+	attemptID := getAttemptID(t, attemptRec.Body.Bytes())
+	solutionCode := buildTwoSumSolution(genResp.Pack.API.FunctionName)
+
+	runReqBody := fmt.Sprintf(`{"attempt_id":"%s","code":%q,"which":"public"}`, attemptID, solutionCode)
 	runReq := httptest.NewRequest(http.MethodPost, "/api/run-tests", strings.NewReader(runReqBody))
 	runReq.Header.Set("Content-Type", "application/json")
 	runRec := httptest.NewRecorder()
@@ -180,8 +184,7 @@ func TestAttemptLifecycle(t *testing.T) {
 		t.Fatalf("run-tests returned %d", runRec.Code)
 	}
 
-	attemptID := getAttemptID(t, attemptRec.Body.Bytes())
-	submitReq := httptest.NewRequest(http.MethodPost, "/api/submit", strings.NewReader(`{"attempt_id":"`+attemptID+`","code":"function solution(){ return 42; }"}`))
+	submitReq := httptest.NewRequest(http.MethodPost, "/api/submit", strings.NewReader(fmt.Sprintf(`{"attempt_id":"%s","code":%q}`, attemptID, solutionCode)))
 	submitReq.Header.Set("Content-Type", "application/json")
 	submitRec := httptest.NewRecorder()
 	server.Handler().ServeHTTP(submitRec, submitReq)
@@ -226,7 +229,7 @@ func TestAttemptLifecycle(t *testing.T) {
 		t.Fatalf("expected attempt id %q, got %q", attemptID, attemptPayload.Attempt.ID)
 	}
 	if attemptPayload.Attempt.PassCount != 2 {
-		t.Fatalf("expected pass count 2, got %d", attemptPayload.Attempt.PassCount)
+		t.Fatalf("expected pass count 2, got %d (runs=%v)", attemptPayload.Attempt.PassCount, attemptPayload.Runs)
 	}
 	if attemptPayload.Attempt.EndedAt < attemptPayload.Attempt.StartedAt {
 		t.Fatalf("expected ended_at to be >= started_at")

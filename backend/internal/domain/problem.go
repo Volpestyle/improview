@@ -50,6 +50,14 @@ type Complexity struct {
 	Space string `json:"space"`
 }
 
+// ReferenceSolution contains executable code that can be replayed for validation/smoke tests.
+type ReferenceSolution struct {
+	Kind     string `json:"kind"`
+	Language string `json:"language"`
+	Code     string `json:"code"`
+	Notes    string `json:"notes,omitempty"`
+}
+
 // TestSuite groups public and hidden tests for a generated problem.
 type TestSuite struct {
 	Public []Example `json:"public"`
@@ -74,14 +82,15 @@ type WorkspaceTemplate struct {
 
 // ProblemPack is the full payload returned by the LLM broker.
 type ProblemPack struct {
-	Problem           ProblemMetadata    `json:"problem"`
-	API               APISignature       `json:"api"`
-	TimeEstimateMins  int                `json:"time_estimate_minutes"`
-	Hint              string             `json:"hint"`
-	Solutions         []SolutionOutline  `json:"solutions"`
-	Tests             TestSuite          `json:"tests"`
-	MacroCategory     string             `json:"macro_category"`
-	WorkspaceTemplate *WorkspaceTemplate `json:"workspace_template,omitempty"`
+	Problem            ProblemMetadata     `json:"problem"`
+	API                APISignature        `json:"api"`
+	TimeEstimateMins   int                 `json:"time_estimate_minutes"`
+	Hint               string              `json:"hint"`
+	Solutions          []SolutionOutline   `json:"solutions"`
+	ReferenceSolutions []ReferenceSolution `json:"reference_solutions"`
+	Tests              TestSuite           `json:"tests"`
+	MacroCategory      string              `json:"macro_category"`
+	WorkspaceTemplate  *WorkspaceTemplate  `json:"workspace_template,omitempty"`
 }
 
 // Attempt captures stored attempt metadata.

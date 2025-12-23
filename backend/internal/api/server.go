@@ -11,6 +11,8 @@ import (
 
 	"improview/backend/internal/auth"
 	"improview/backend/internal/domain"
+
+	llmhub "github.com/Volpestyle/llmhub/packages/go"
 )
 
 // Server exposes the HTTP API expected by the frontend and external clients.
@@ -38,6 +40,18 @@ func NewServer(services Services) *Server {
 	s.mux.Handle("/api/user/saved-problems/", s.guard(http.HandlerFunc(s.handleSavedProblemResource)))
 	s.mux.Handle("/api/healthz", http.HandlerFunc(s.handleHealth))
 	s.mux.Handle("/api/version", http.HandlerFunc(s.handleVersion))
+	if services.LLMHub != nil {
+		s.mux.Handle("/api/models", llmhub.ModelsHandler(services.LLMHub, nil))
+	} else {
+		s.mux.Handle("/api/models", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodGet {
+				w.Header().Set("Allow", http.MethodGet)
+				w.WriteHeader(http.StatusMethodNotAllowed)
+				return
+			}
+			writeError(w, ErrNotImplemented)
+		}))
+	}
 
 	return s
 }
@@ -624,7 +638,6 @@ func (s *Server) appendSavedProblemAttempt(w http.ResponseWriter, r *http.Reques
 		FailCount:   req.FailCount,
 		RuntimeMS:   req.RuntimeMS,
 		Code:        req.Code,
-		CodeS3Key:   strings.TrimSpace(req.CodeS3Key),
 		SubmittedAt: req.SubmittedAt,
 	}
 

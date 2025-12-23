@@ -4,12 +4,14 @@ import "testing"
 
 func TestParseProviderSecretExtractsKnownFields(t *testing.T) {
 	payload := `{
-		"openaiApiKey": "  key-123  ",
-		"openaiBaseUrl": "https://api.sandbox/v1 ",
-		"openaiModel": "gpt-sandbox",
-		"openaiProvider": "sandbox",
-		"grokApiKey": "ignored"
-	}`
+			"openaiApiKey": "  key-123  ",
+			"openaiBaseUrl": "https://api.sandbox/v1 ",
+			"openaiModel": "gpt-sandbox",
+			"openaiProvider": "sandbox",
+			"grokApiKey": "grok-secret",
+			"anthropicApiKey": "claude-secret",
+			"googleApiKey": "gemini-secret"
+		}`
 
 	env, err := parseProviderSecret(payload)
 	if err != nil {
@@ -21,9 +23,9 @@ func TestParseProviderSecretExtractsKnownFields(t *testing.T) {
 	assertEqual(t, env["OPENAI_MODEL"], "gpt-sandbox")
 	assertEqual(t, env["OPENAI_PROVIDER"], "sandbox")
 
-	if _, ok := env["grokApiKey"]; ok {
-		t.Fatalf("unexpected field grokApiKey propagated")
-	}
+	assertEqual(t, env["GROK_API_KEY"], "grok-secret")
+	assertEqual(t, env["ANTHROPIC_API_KEY"], "claude-secret")
+	assertEqual(t, env["GOOGLE_API_KEY"], "gemini-secret")
 }
 
 func TestParseProviderSecretIgnoresMissingFields(t *testing.T) {

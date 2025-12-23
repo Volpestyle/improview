@@ -120,7 +120,6 @@ type CreateSavedProblemAttemptRequest struct {
 	FailCount   int    `json:"fail_count,omitempty"`
 	RuntimeMS   int64  `json:"runtime_ms,omitempty"`
 	SubmittedAt *int64 `json:"submitted_at,omitempty"`
-	CodeS3Key   string `json:"code_s3_key,omitempty"`
 }
 
 // SavedProblemAttemptResponse wraps a single attempt snapshot.

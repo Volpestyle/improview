@@ -1,12 +1,10 @@
 package app
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -14,7 +12,8 @@ import (
 
 	"improview/backend/internal/api"
 	"improview/backend/internal/domain"
-	"improview/backend/internal/jsonfmt"
+
+	llmhub "github.com/Volpestyle/llmhub/packages/go"
 )
 
 var jsonValueSchema = map[string]any{
@@ -233,44 +232,60 @@ var problemPackJSONSchema = map[string]any{
 		"workspace_file": map[string]any{
 			"type":                 "object",
 			"additionalProperties": false,
-			"required": []string{"code"},
+			"required":             []string{"code"},
 			"properties": map[string]any{
-				"code": map[string]any{"type": "string"},
+				"code":   map[string]any{"type": "string"},
 				"hidden": map[string]any{"type": "boolean"},
 			},
 		},
 	},
 }
 
-func newProblemPackResponseFormat() responseFormat {
-	return responseFormat{
+func newProblemPackResponseFormat() *llmhub.ResponseFormat {
+	return &llmhub.ResponseFormat{
 		Type: "json_schema",
-		JSONSchema: &responseJSONSchema{
+		JsonSchema: &llmhub.JsonSchemaFormat{
 			Name:   "problem_pack",
-			Strict: true,
 			Schema: problemPackJSONSchema,
+			Strict: true,
 		},
 	}
 }
 
-// LLMProblemGenerator talks to an LLM provider to create fresh problem packs.
+type providerSettings struct {
+	provider     llmhub.Provider
+	label        string
+	defaultModel string
+}
+
+type llmHubClient interface {
+	Generate(ctx context.Context, in llmhub.GenerateInput) (llmhub.GenerateOutput, error)
+}
+
+type hubFactory func(cfg llmhub.Config) (llmHubClient, error)
+
+const defaultAnthropicAPIVersion = "2023-06-01"
+
+// LLMProblemGenerator talks to llmhub to create fresh problem packs.
 type LLMProblemGenerator struct {
-	client      *http.Client
-	baseURL     string
-	model       string
-	apiKey      string
+	hub         llmHubClient
+	baseHub     *llmhub.Hub
+	hubConfig   llmhub.Config
+	hubFactory  hubFactory
 	temperature float64
-	provider    string
+	defaultProv llmhub.Provider
+	providers   map[llmhub.Provider]providerSettings
 }
 
 // NewLLMProblemGenerator constructs an LLM-backed problem generator instance.
 func NewLLMProblemGenerator(opts LLMOptions) (*LLMProblemGenerator, error) {
-	apiKey := strings.TrimSpace(opts.APIKey)
-	if apiKey == "" {
+	keys := normalizeAPIKeys(opts.APIKey, opts.APIKeys)
+	if len(keys) == 0 {
 		return nil, errors.New("llm generator: missing API key")
 	}
+	apiKey := keys[0]
 
-	base := strings.TrimRight(defaultString(opts.BaseURL, defaultLLMBaseURL), "/")
+	base := normalizeProviderBase(defaultString(opts.BaseURL, defaultLLMBaseURL), "/v1")
 	if base == "" {
 		return nil, errors.New("llm generator: missing base URL")
 	}
@@ -297,35 +312,102 @@ func NewLLMProblemGenerator(opts LLMOptions) (*LLMProblemGenerator, error) {
 		client.Timeout = timeout
 	}
 
+	hubCfg := llmhub.Config{
+		HTTPClient: client,
+		OpenAI: &llmhub.OpenAIConfig{
+			APIKey:              apiKey,
+			APIKeys:             keys,
+			BaseURL:             base,
+			DefaultUseResponses: true,
+		},
+	}
+
+	providers := map[llmhub.Provider]providerSettings{
+		llmhub.ProviderOpenAI: {
+			provider:     llmhub.ProviderOpenAI,
+			label:        defaultString(opts.Provider, "OpenAI"),
+			defaultModel: model,
+		},
+	}
+
+	for rawKey, cfg := range opts.AdditionalProviders {
+		providerKey := canonicalProviderKey(rawKey)
+		if providerKey == "" {
+			continue
+		}
+		providerKeys := normalizeAPIKeys(cfg.APIKey, cfg.APIKeys)
+		if len(providerKeys) == 0 {
+			continue
+		}
+		providerAPIKey := providerKeys[0]
+		baseURL := normalizeProviderBase(
+			defaultString(cfg.BaseURL, defaultBaseURLForProvider(providerKey)),
+			versionSuffixesForProvider(providerKey)...,
+		)
+		if baseURL == "" {
+			continue
+		}
+		providerModel := strings.TrimSpace(cfg.Model)
+		label := defaultString(cfg.Provider, defaultLabelForProvider(providerKey))
+
+		switch providerKey {
+		case llmhub.ProviderAnthropic:
+			hubCfg.Anthropic = &llmhub.AnthropicConfig{
+				APIKey:  providerAPIKey,
+				APIKeys: providerKeys,
+				BaseURL: baseURL,
+				Version: defaultAnthropicAPIVersion,
+			}
+		case llmhub.ProviderXAI:
+			hubCfg.XAI = &llmhub.XAIConfig{
+				APIKey:  providerAPIKey,
+				APIKeys: providerKeys,
+				BaseURL: baseURL,
+			}
+		case llmhub.ProviderGoogle:
+			hubCfg.Google = &llmhub.GoogleConfig{
+				APIKey:  providerAPIKey,
+				APIKeys: providerKeys,
+				BaseURL: baseURL,
+			}
+		}
+
+		providers[providerKey] = providerSettings{
+			provider:     providerKey,
+			label:        label,
+			defaultModel: providerModel,
+		}
+	}
+
+	hub, err := llmhub.New(hubCfg)
+	if err != nil {
+		return nil, fmt.Errorf("llm generator: configure hub: %w", err)
+	}
+
 	return &LLMProblemGenerator{
-		client:      client,
-		baseURL:     base,
-		model:       model,
-		apiKey:      apiKey,
+		hub:         hub,
+		baseHub:     hub,
+		hubConfig:   hubCfg,
+		hubFactory:  defaultHubFactory,
 		temperature: temperature,
-		provider:    strings.TrimSpace(opts.Provider),
+		defaultProv: llmhub.ProviderOpenAI,
+		providers:   providers,
 	}, nil
 }
 
-// Generate issues a request to the LLM and maps the JSON response into a ProblemPack.
+func defaultHubFactory(cfg llmhub.Config) (llmHubClient, error) {
+	return llmhub.New(cfg)
+}
+
+// Hub exposes the underlying llmhub instance so other services can reuse it.
+func (g *LLMProblemGenerator) Hub() *llmhub.Hub {
+	return g.baseHub
+}
+
+// Generate issues a request to llmhub and maps the JSON response into a ProblemPack.
 func (g *LLMProblemGenerator) Generate(ctx context.Context, req api.GenerateRequest) (domain.ProblemPack, error) {
 	if g == nil {
 		return domain.ProblemPack{}, api.ErrNotImplemented
-	}
-
-	baseURL := g.baseURL
-	model := g.model
-	provider := g.provider
-	if req.LLM != nil {
-		if trimmed := strings.TrimSpace(req.LLM.BaseURL); trimmed != "" {
-			baseURL = strings.TrimRight(trimmed, "/")
-		}
-		if trimmed := strings.TrimSpace(req.LLM.Model); trimmed != "" {
-			model = trimmed
-		}
-		if trimmed := strings.TrimSpace(req.LLM.Provider); trimmed != "" {
-			provider = trimmed
-		}
 	}
 
 	category := strings.TrimSpace(req.Category)
@@ -334,80 +416,65 @@ func (g *LLMProblemGenerator) Generate(ctx context.Context, req api.GenerateRequ
 		return domain.ProblemPack{}, api.ErrBadRequest
 	}
 
-	payload := chatCompletionRequest{
-		Model:          model,
-		ResponseFormat: newProblemPackResponseFormat(),
-		Temperature:    g.temperature,
-		Messages: []chatMessage{
+	providerKey, labelOverride := g.selectProvider(req)
+	settings, err := g.providerSettings(providerKey)
+	if err != nil {
+		return domain.ProblemPack{}, err
+	}
+
+	label := settings.label
+	if labelOverride != "" {
+		label = labelOverride
+	}
+
+	model := settings.defaultModel
+	if req.LLM != nil {
+		if trimmed := strings.TrimSpace(req.LLM.Model); trimmed != "" {
+			model = trimmed
+		}
+	}
+	if model == "" {
+		return domain.ProblemPack{}, errors.New("llm generator: missing model")
+	}
+
+	input := llmhub.GenerateInput{
+		Provider: providerKey,
+		Model:    model,
+		Messages: []llmhub.Message{
 			{
-				Role: "system",
-				Content: g.systemPrompt(
-					category,
-					difficulty,
-					req.FrontendFramework,
-					req.Styling,
-					provider,
-				),
+				Role:    "system",
+				Content: []llmhub.ContentPart{{Type: "text", Text: g.systemPrompt(category, difficulty, req.FrontendFramework, req.Styling, label)}},
 			},
 			{
-				Role: "user",
-				Content: g.userPrompt(
-					category,
-					difficulty,
-					req.CustomPrompt,
-					req.Provider,
-					provider,
-					req.FrontendFramework,
-					req.Styling,
-				),
+				Role:    "user",
+				Content: []llmhub.ContentPart{{Type: "text", Text: g.userPrompt(category, difficulty, req.CustomPrompt, req.Provider, label, req.FrontendFramework, req.Styling)}},
 			},
 		},
+		ResponseFormat: newProblemPackResponseFormat(),
+	}
+	temp := g.temperature
+	input.Temperature = &temp
+
+	hubClient := g.hub
+	if req.LLM != nil {
+		if override := strings.TrimSpace(req.LLM.BaseURL); override != "" {
+			overrideHub, err := g.buildHubWithOverride(providerKey, override)
+			if err != nil {
+				return domain.ProblemPack{}, err
+			}
+			hubClient = overrideHub
+		}
 	}
 
-	body, err := json.Marshal(payload)
+	g.logf("provider=%s model=%s framework=%s", providerKey, model, req.FrontendFramework)
+	output, err := hubClient.Generate(ctx, input)
 	if err != nil {
-		return domain.ProblemPack{}, fmt.Errorf("llm generator: marshal request: %w", err)
+		return domain.ProblemPack{}, err
 	}
 
-	if baseURL == "" {
-		return domain.ProblemPack{}, errors.New("llm generator: missing base URL")
-	}
-
-	endpoint := baseURL + "/chat/completions"
-	g.logf("POST %s payload=%s", endpoint, jsonfmt.FormatForLog(body, jsonfmt.DefaultLogLimit))
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
-	if err != nil {
-		return domain.ProblemPack{}, fmt.Errorf("llm generator: create request: %w", err)
-	}
-	httpReq.Header.Set("Authorization", "Bearer "+g.apiKey)
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Accept", "application/json")
-
-	resp, err := g.client.Do(httpReq)
-	if err != nil {
-		return domain.ProblemPack{}, fmt.Errorf("llm generator: do request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return domain.ProblemPack{}, fmt.Errorf("llm generator: read response: %w", err)
-	}
-
-	g.logf("response status=%d body=%s", resp.StatusCode, jsonfmt.FormatForLog(respBody, jsonfmt.DefaultLogLimit))
-
-	if resp.StatusCode >= 400 {
-		return domain.ProblemPack{}, g.wrapHTTPError(resp.StatusCode, respBody)
-	}
-
-	var completion chatCompletionResponse
-	if err := json.Unmarshal(respBody, &completion); err != nil {
-		return domain.ProblemPack{}, fmt.Errorf("llm generator: decode response: %w", err)
-	}
-
-	content := strings.TrimSpace(completion.Content())
+	content := strings.TrimSpace(output.Text)
 	if content == "" {
-		return domain.ProblemPack{}, errors.New("llm generator: empty completion content")
+		return domain.ProblemPack{}, errors.New("llm generator: empty response")
 	}
 
 	var pack domain.ProblemPack
@@ -418,6 +485,169 @@ func (g *LLMProblemGenerator) Generate(ctx context.Context, req api.GenerateRequ
 	return pack, nil
 }
 
+func (g *LLMProblemGenerator) selectProvider(req api.GenerateRequest) (llmhub.Provider, string) {
+	if req.LLM == nil {
+		return g.defaultProv, ""
+	}
+	override := strings.TrimSpace(req.LLM.Provider)
+	if override == "" {
+		return g.defaultProv, ""
+	}
+	if selected := canonicalProviderKey(override); selected != "" {
+		return selected, override
+	}
+	return g.defaultProv, override
+}
+
+func (g *LLMProblemGenerator) providerSettings(provider llmhub.Provider) (providerSettings, error) {
+	settings, ok := g.providers[provider]
+	if !ok {
+		return providerSettings{}, fmt.Errorf("llm generator: provider %s not configured", provider)
+	}
+	return settings, nil
+}
+
+func (g *LLMProblemGenerator) buildHubWithOverride(provider llmhub.Provider, baseURL string) (llmHubClient, error) {
+	if g.hubFactory == nil {
+		return nil, errors.New("llm generator: hub factory unavailable")
+	}
+	cfg := cloneHubConfig(g.hubConfig)
+	normalized := normalizeProviderBase(baseURL, versionSuffixesForProvider(provider)...)
+	if normalized == "" {
+		return nil, errors.New("llm generator: missing override base URL")
+	}
+
+	switch provider {
+	case llmhub.ProviderOpenAI:
+		if cfg.OpenAI == nil {
+			return nil, errors.New("llm generator: openai not configured")
+		}
+		cfg.OpenAI.BaseURL = normalized
+	case llmhub.ProviderAnthropic:
+		if cfg.Anthropic == nil {
+			return nil, errors.New("llm generator: anthropic not configured")
+		}
+		cfg.Anthropic.BaseURL = normalized
+	case llmhub.ProviderXAI:
+		if cfg.XAI == nil {
+			return nil, errors.New("llm generator: grok not configured")
+		}
+		cfg.XAI.BaseURL = normalized
+	case llmhub.ProviderGoogle:
+		if cfg.Google == nil {
+			return nil, errors.New("llm generator: google not configured")
+		}
+		cfg.Google.BaseURL = normalized
+	default:
+		return nil, fmt.Errorf("llm generator: provider %s does not support overrides", provider)
+	}
+
+	return g.hubFactory(cfg)
+}
+
+func canonicalProviderKey(value string) llmhub.Provider {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "openai":
+		return llmhub.ProviderOpenAI
+	case "anthropic", "claude", "claude-3", "claude-3.5":
+		return llmhub.ProviderAnthropic
+	case "grok", "xai":
+		return llmhub.ProviderXAI
+	case "google", "gemini":
+		return llmhub.ProviderGoogle
+	default:
+		return ""
+	}
+}
+
+func defaultBaseURLForProvider(provider llmhub.Provider) string {
+	switch provider {
+	case llmhub.ProviderAnthropic:
+		return defaultAnthropicBaseURL
+	case llmhub.ProviderXAI:
+		return defaultGrokBaseURL
+	case llmhub.ProviderGoogle:
+		return defaultGoogleBaseURL
+	default:
+		return defaultLLMBaseURL
+	}
+}
+
+func defaultLabelForProvider(provider llmhub.Provider) string {
+	switch provider {
+	case llmhub.ProviderAnthropic:
+		return "Anthropic Claude"
+	case llmhub.ProviderXAI:
+		return "Grok"
+	case llmhub.ProviderGoogle:
+		return "Google Gemini"
+	default:
+		return "OpenAI"
+	}
+}
+
+func versionSuffixesForProvider(provider llmhub.Provider) []string {
+	switch provider {
+	case llmhub.ProviderGoogle:
+		return []string{"/v1beta", "/v1"}
+	default:
+		return []string{"/v1"}
+	}
+}
+
+func normalizeProviderBase(base string, suffixes ...string) string {
+	trimmed := strings.TrimSpace(base)
+	if trimmed == "" {
+		return ""
+	}
+	trimmed = strings.TrimRight(trimmed, "/")
+	for _, suffix := range suffixes {
+		trimmed = strings.TrimSuffix(trimmed, suffix)
+	}
+	return strings.TrimRight(trimmed, "/")
+}
+
+func normalizeAPIKeys(primary string, extras []string) []string {
+	seen := make(map[string]struct{})
+	var keys []string
+	appendKey := func(raw string) {
+		trimmed := strings.TrimSpace(raw)
+		if trimmed == "" {
+			return
+		}
+		if _, ok := seen[trimmed]; ok {
+			return
+		}
+		seen[trimmed] = struct{}{}
+		keys = append(keys, trimmed)
+	}
+	appendKey(primary)
+	for _, key := range extras {
+		appendKey(key)
+	}
+	return keys
+}
+
+func cloneHubConfig(cfg llmhub.Config) llmhub.Config {
+	clone := cfg
+	if cfg.OpenAI != nil {
+		c := *cfg.OpenAI
+		clone.OpenAI = &c
+	}
+	if cfg.Anthropic != nil {
+		c := *cfg.Anthropic
+		clone.Anthropic = &c
+	}
+	if cfg.XAI != nil {
+		c := *cfg.XAI
+		clone.XAI = &c
+	}
+	if cfg.Google != nil {
+		c := *cfg.Google
+		clone.Google = &c
+	}
+	return clone
+}
 func (g *LLMProblemGenerator) systemPrompt(category, difficulty, framework, styling, provider string) string {
 	var providerLine string
 	if provider != "" {
@@ -490,18 +720,6 @@ func (g *LLMProblemGenerator) userPrompt(category, difficulty, customPrompt, pro
 	return strings.Join(lines, "\n\n")
 }
 
-func (g *LLMProblemGenerator) wrapHTTPError(status int, body []byte) error {
-	var apiErr openAIError
-	if err := json.Unmarshal(body, &apiErr); err == nil && apiErr.Error.Message != "" {
-		return fmt.Errorf("llm generator: upstream %d %s: %s", status, apiErr.Error.Type, apiErr.Error.Message)
-	}
-	snippet := string(body)
-	if len(snippet) > 256 {
-		snippet = snippet[:256]
-	}
-	return fmt.Errorf("llm generator: upstream returned %d: %s", status, snippet)
-}
-
 func (g *LLMProblemGenerator) logf(format string, args ...any) {
 	if !llmDebugEnabled() {
 		return
@@ -511,91 +729,4 @@ func (g *LLMProblemGenerator) logf(format string, args ...any) {
 
 func llmDebugEnabled() bool {
 	return strings.TrimSpace(os.Getenv("CI_SMOKE_DEBUG")) != ""
-}
-
-type responseJSONSchema struct {
-	Name   string         `json:"name"`
-	Strict bool           `json:"strict"`
-	Schema map[string]any `json:"schema"`
-}
-
-type responseFormat struct {
-	Type       string              `json:"type"`
-	JSONSchema *responseJSONSchema `json:"json_schema,omitempty"`
-}
-
-type chatMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
-}
-
-type chatCompletionRequest struct {
-	Model          string         `json:"model"`
-	Messages       []chatMessage  `json:"messages"`
-	ResponseFormat responseFormat `json:"response_format"`
-	Temperature    float64        `json:"temperature,omitempty"`
-}
-
-type chatCompletionResponse struct {
-	Choices []struct {
-		Message openAIMessage `json:"message"`
-	} `json:"choices"`
-}
-
-func (r chatCompletionResponse) Content() string {
-	if len(r.Choices) == 0 {
-		return ""
-	}
-	return r.Choices[0].Message.Content
-}
-
-type openAIMessage struct {
-	Content string
-}
-
-type contentArrayElement struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
-}
-
-func (m *openAIMessage) UnmarshalJSON(data []byte) error {
-	var envelope struct {
-		Content json.RawMessage `json:"content"`
-	}
-	if err := json.Unmarshal(data, &envelope); err != nil {
-		return err
-	}
-	if len(envelope.Content) == 0 {
-		m.Content = ""
-		return nil
-	}
-	if envelope.Content[0] == '"' {
-		var text string
-		if err := json.Unmarshal(envelope.Content, &text); err != nil {
-			return err
-		}
-		m.Content = text
-		return nil
-	}
-	var parts []contentArrayElement
-	if err := json.Unmarshal(envelope.Content, &parts); err == nil {
-		var builder strings.Builder
-		for _, part := range parts {
-			if strings.EqualFold(part.Type, "text") {
-				builder.WriteString(part.Text)
-			}
-		}
-		m.Content = builder.String()
-		return nil
-	}
-	// Fallback: keep raw JSON to aid debugging
-	m.Content = string(envelope.Content)
-	return nil
-}
-
-type openAIError struct {
-	Error struct {
-		Message string `json:"message"`
-		Type    string `json:"type"`
-	} `json:"error"`
 }

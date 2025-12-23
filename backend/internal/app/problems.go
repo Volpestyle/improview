@@ -13,31 +13,31 @@ import (
 // categoryToMacroCategory maps specific categories to their macro categories.
 var categoryToMacroCategory = map[string]string{
 	// DSA categories
-	"arrays":        "dsa",
-	"bfs-dfs":       "dsa",
-	"maps-sets":     "dsa",
-	"dp":            "dsa",
-	"graphs":        "dsa",
-	"strings":       "dsa",
-	"math":          "dsa",
-	"heaps":         "dsa",
-	"two-pointers":  "dsa",
+	"arrays":       "dsa",
+	"bfs-dfs":      "dsa",
+	"maps-sets":    "dsa",
+	"dp":           "dsa",
+	"graphs":       "dsa",
+	"strings":      "dsa",
+	"math":         "dsa",
+	"heaps":        "dsa",
+	"two-pointers": "dsa",
 
 	// Frontend categories
-	"react-components":  "frontend",
-	"css-layouts":       "frontend",
-	"accessibility":     "frontend",
-	"state-management":  "frontend",
-	"performance":       "frontend",
-	"forms-validation":  "frontend",
+	"react-components": "frontend",
+	"css-layouts":      "frontend",
+	"accessibility":    "frontend",
+	"state-management": "frontend",
+	"performance":      "frontend",
+	"forms-validation": "frontend",
 
 	// System design categories
-	"scalability":     "system-design",
-	"databases":       "system-design",
-	"caching":         "system-design",
-	"load-balancing":  "system-design",
-	"microservices":   "system-design",
-	"api-design":      "system-design",
+	"scalability":    "system-design",
+	"databases":      "system-design",
+	"caching":        "system-design",
+	"load-balancing": "system-design",
+	"microservices":  "system-design",
+	"api-design":     "system-design",
 }
 
 // getMacroCategory returns the macro category for a given specific category.
@@ -151,6 +151,81 @@ func defaultProblemPacks() map[string]domain.ProblemPack {
 					Code:       "function shortestPath(grid) { /* ... */ }",
 				},
 			},
+			ReferenceSolutions: []domain.ReferenceSolution{
+				{
+					Kind:     "baseline",
+					Language: "javascript",
+					Notes:    "Uses Array.shift for the queue, which is easy to follow but slower for large grids.",
+					Code: `function shortestPath(grid) {
+  if (!Array.isArray(grid) || grid.length === 0 || grid[0].length === 0) return -1;
+  const rows = grid.length;
+  const cols = grid[0].length;
+  if (grid[0][0] === 1 || grid[rows - 1][cols - 1] === 1) return -1;
+  const visited = Array.from({ length: rows }, () => Array(cols).fill(false));
+  const queue = [[0, 0, 1]];
+  visited[0][0] = true;
+  const dirs = [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+  ];
+
+  while (queue.length > 0) {
+    const [r, c, steps] = queue.shift();
+    if (r === rows - 1 && c === cols - 1) {
+      return steps;
+    }
+    for (const [dr, dc] of dirs) {
+      const nr = r + dr;
+      const nc = c + dc;
+      if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;
+      if (grid[nr][nc] === 1 || visited[nr][nc]) continue;
+      visited[nr][nc] = true;
+      queue.push([nr, nc, steps + 1]);
+    }
+  }
+  return -1;
+}`,
+				},
+				{
+					Kind:     "optimal",
+					Language: "javascript",
+					Notes:    "Same BFS but with a pointer-based queue to keep operations O(1).",
+					Code: `function shortestPath(grid) {
+  if (!Array.isArray(grid) || grid.length === 0 || grid[0].length === 0) return -1;
+  const rows = grid.length;
+  const cols = grid[0].length;
+  if (grid[0][0] === 1 || grid[rows - 1][cols - 1] === 1) return -1;
+  const visited = Array.from({ length: rows }, () => Array(cols).fill(false));
+  const queue = [[0, 0, 1]];
+  visited[0][0] = true;
+  let head = 0;
+  const dirs = [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+  ];
+
+  while (head < queue.length) {
+    const [r, c, steps] = queue[head++];
+    if (r === rows - 1 && c === cols - 1) {
+      return steps;
+    }
+    for (const [dr, dc] of dirs) {
+      const nr = r + dr;
+      const nc = c + dc;
+      if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;
+      if (grid[nr][nc] === 1 || visited[nr][nc]) continue;
+      visited[nr][nc] = true;
+      queue.push([nr, nc, steps + 1]);
+    }
+  }
+  return -1;
+}`,
+				},
+			},
 			Tests: domain.TestSuite{
 				Public: []domain.Example{
 					{Input: []any{[][]int{{0, 0}, {0, 0}}}, Output: 3},
@@ -192,8 +267,66 @@ func defaultProblemPacks() map[string]domain.ProblemPack {
 					Code:       "function twoSum(nums, target) { /* ... */ }",
 				},
 			},
+			ReferenceSolutions: []domain.ReferenceSolution{
+				{
+					Kind:     "baseline",
+					Language: "javascript",
+					Notes:    "Brute-force scan of all pairs.",
+					Code: `function twoSum(nums, target) {
+  for (let i = 0; i < nums.length; i++) {
+    for (let j = i + 1; j < nums.length; j++) {
+      if (nums[i] + nums[j] === target) {
+        return [i, j];
+      }
+    }
+  }
+  return [];
+}`,
+				},
+				{
+					Kind:     "optimal",
+					Language: "javascript",
+					Notes:    "Single-pass hash map lookup.",
+					Code: `function twoSum(nums, target) {
+  const seen = new Map();
+  for (let i = 0; i < nums.length; i++) {
+    const complement = target - nums[i];
+    if (seen.has(complement)) {
+      return [seen.get(complement), i];
+    }
+    seen.set(nums[i], i);
+  }
+  return [];
+}`,
+				},
+				{
+					Kind:     "alt_optimal",
+					Language: "javascript",
+					Notes:    "Two-pointer technique on a sorted copy while tracking original indices.",
+					Code: `function twoSum(nums, target) {
+  const indexed = nums.map((value, index) => ({ value, index }));
+  indexed.sort((a, b) => a.value - b.value);
+  let left = 0;
+  let right = indexed.length - 1;
+  while (left < right) {
+    const sum = indexed[left].value + indexed[right].value;
+    if (sum === target) {
+      const i = indexed[left].index;
+      const j = indexed[right].index;
+      return i < j ? [i, j] : [j, i];
+    }
+    if (sum < target) {
+      left++;
+    } else {
+      right--;
+    }
+  }
+  return [];
+}`,
+				},
+			},
 			Tests: domain.TestSuite{
-				Public: []domain.Example{{Input: []any{[]int{1, 3, 4, 2}, 6}, Output: []int{1, 3}}},
+				Public: []domain.Example{{Input: []any{[]int{2, 7, 11, 15}, 9}, Output: []int{0, 1}}},
 				Hidden: []domain.Example{{Input: []any{[]int{-1, -2, -3, -4, -5}, -8}, Output: []int{2, 4}}},
 			},
 			MacroCategory: "dsa", // default for random problems
@@ -207,6 +340,7 @@ func cloneProblemPack(src domain.ProblemPack) domain.ProblemPack {
 	clone.Problem.EdgeCases = append([]string(nil), src.Problem.EdgeCases...)
 	clone.Problem.Examples = append([]domain.Example(nil), src.Problem.Examples...)
 	clone.Solutions = append([]domain.SolutionOutline(nil), src.Solutions...)
+	clone.ReferenceSolutions = append([]domain.ReferenceSolution(nil), src.ReferenceSolutions...)
 	clone.Tests.Public = append([]domain.Example(nil), src.Tests.Public...)
 	clone.Tests.Hidden = append([]domain.Example(nil), src.Tests.Hidden...)
 	clone.API.Params = append([]domain.APIParam(nil), src.API.Params...)

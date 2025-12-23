@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"sync"
 
@@ -146,31 +145,6 @@ func (s *MemoryAttemptStore) Get(_ context.Context, attemptID string) (domain.At
 		runs = make([]domain.RunResult, 0)
 	}
 	return attempt, runs, nil
-}
-
-// SimpleTestRunner performs lightweight evaluation suitable for local development.
-type SimpleTestRunner struct{}
-
-// Run simulates test execution and marks code containing the word "fail" as a failure.
-func (SimpleTestRunner) Run(_ context.Context, req api.RunTestsRequest) (domain.RunSummary, error) {
-	if strings.TrimSpace(req.Code) == "" {
-		return domain.RunSummary{}, api.ErrBadRequest
-	}
-
-	status := "pass"
-	if strings.Contains(strings.ToLower(req.Code), "fail") {
-		status = "fail"
-	}
-
-	result := domain.RunResult{
-		TestID: fmt.Sprintf("%s-0", req.Which),
-		Status: status,
-		TimeMS: 1,
-		Stdout: "",
-		Stderr: "",
-	}
-
-	return domain.RunSummary{AttemptID: req.AttemptID, Results: []domain.RunResult{result}}, nil
 }
 
 // SubmissionService coordinates hidden test execution and attempt finalization.

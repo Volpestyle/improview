@@ -77,7 +77,6 @@ type SavedAttemptSnapshot struct {
 	SubmittedAt *int64 `json:"submitted_at,omitempty"`
 	RuntimeMS   int64  `json:"runtime_ms"`
 	Code        string `json:"code,omitempty"`
-	CodeS3Key   string `json:"code_s3_key,omitempty"`
 }
 
 // SavedProblemDetail expands on the summary with full attempt history.
@@ -113,7 +112,6 @@ type SavedProblemAttemptInput struct {
 	FailCount   int
 	RuntimeMS   int64
 	Code        string
-	CodeS3Key   string
 	SubmittedAt *int64
 }
 

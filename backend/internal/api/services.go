@@ -6,6 +6,8 @@ import (
 
 	"improview/backend/internal/auth"
 	"improview/backend/internal/domain"
+
+	llmhub "github.com/Volpestyle/llmhub/packages/go"
 )
 
 // ProblemGenerator creates problem packs based on the requested parameters.
@@ -73,6 +75,7 @@ type Services struct {
 	SavedProblems SavedProblemStore
 	Tests         TestRunner
 	Submission    SubmissionEvaluator
+	LLMHub        llmhub.HubAPI
 	Health        HealthReporter
 	Clock         Clock
 	Authenticator auth.Authenticator

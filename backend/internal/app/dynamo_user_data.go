@@ -132,7 +132,6 @@ type savedProblemItem struct {
 	LastAttemptFailCount   int      `dynamodbav:"last_attempt_fail_count,omitempty"`
 	LastAttemptRuntimeMS   int64    `dynamodbav:"last_attempt_runtime_ms,omitempty"`
 	LastAttemptCode        string   `dynamodbav:"last_attempt_code,omitempty"`
-	LastAttemptCodeS3Key   string   `dynamodbav:"last_attempt_code_s3_key,omitempty"`
 	LastAttemptSubmittedAt *int64   `dynamodbav:"last_attempt_submitted_at,omitempty"`
 	GSI1PK                 string   `dynamodbav:"gsi1pk"`
 	GSI1SK                 string   `dynamodbav:"gsi1sk"`
@@ -151,7 +150,6 @@ type savedAttemptItem struct {
 	FailCount      int    `dynamodbav:"fail_count"`
 	RuntimeMS      int64  `dynamodbav:"runtime_ms"`
 	Code           string `dynamodbav:"code,omitempty"`
-	CodeS3Key      string `dynamodbav:"code_s3_key,omitempty"`
 	SubmittedAt    *int64 `dynamodbav:"submitted_at,omitempty"`
 	GSI1PK         string `dynamodbav:"gsi1pk"`
 	GSI1SK         string `dynamodbav:"gsi1sk"`
@@ -530,6 +528,9 @@ func (s *DynamoUserDataStore) AppendAttempt(ctx context.Context, userID, savedPr
 	if err != nil {
 		return domain.SavedAttemptSnapshot{}, err
 	}
+	if err := validateSavedAttemptCode(input.Code); err != nil {
+		return domain.SavedAttemptSnapshot{}, err
+	}
 
 	attemptID := strings.TrimSpace(input.AttemptID)
 	if attemptID == "" {
@@ -550,7 +551,6 @@ func (s *DynamoUserDataStore) AppendAttempt(ctx context.Context, userID, savedPr
 	item.LastAttemptFailCount = input.FailCount
 	item.LastAttemptRuntimeMS = input.RuntimeMS
 	item.LastAttemptCode = input.Code
-	item.LastAttemptCodeS3Key = input.CodeS3Key
 	item.LastAttemptSubmittedAt = input.SubmittedAt
 	item.UpdatedAt = updatedAt
 
@@ -571,7 +571,6 @@ func (s *DynamoUserDataStore) AppendAttempt(ctx context.Context, userID, savedPr
 		FailCount:      input.FailCount,
 		RuntimeMS:      input.RuntimeMS,
 		Code:           input.Code,
-		CodeS3Key:      input.CodeS3Key,
 		SubmittedAt:    input.SubmittedAt,
 		GSI1PK:         gsi1pk,
 		GSI1SK:         gsi1sk,
@@ -611,7 +610,6 @@ func (s *DynamoUserDataStore) AppendAttempt(ctx context.Context, userID, savedPr
 		SubmittedAt: input.SubmittedAt,
 		RuntimeMS:   input.RuntimeMS,
 		Code:        input.Code,
-		CodeS3Key:   input.CodeS3Key,
 	}, nil
 }
 
@@ -699,7 +697,6 @@ func toDomainSavedProblemSummary(item savedProblemItem) domain.SavedProblemSumma
 			SubmittedAt: item.LastAttemptSubmittedAt,
 			RuntimeMS:   item.LastAttemptRuntimeMS,
 			Code:        item.LastAttemptCode,
-			CodeS3Key:   item.LastAttemptCodeS3Key,
 		}
 	}
 
@@ -718,7 +715,6 @@ func toDomainAttemptSnapshot(item savedAttemptItem) domain.SavedAttemptSnapshot 
 		SubmittedAt: item.SubmittedAt,
 		RuntimeMS:   item.RuntimeMS,
 		Code:        item.Code,
-		CodeS3Key:   item.CodeS3Key,
 	}
 }
 
