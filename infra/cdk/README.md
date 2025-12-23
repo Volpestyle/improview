@@ -52,12 +52,14 @@ pnpm --dir infra/cdk exec node scripts/set-provider-secret.js \
   --env dev \
   --region us-east-1 \
   --openai "$OPENAI_API_KEY" \
-  --grok "$GROK_API_KEY"
+  --grok "$GROK_API_KEY" \
+  --anthropic "$ANTHROPIC_API_KEY" \
+  --google "$GOOGLE_API_KEY"
 ```
 
 Install the dependencies first (`pnpm --dir infra/cdk install`) so the script can load the AWS SDK helper.
 
-You can rely on environment variables (`OPENAI_API_KEY`, `GROK_API_KEY`, `AWS_REGION`) instead of CLI flags if you prefer. The script merges with any existing secret payload and stamps an `updatedAt` timestamp.
+You can rely on environment variables (`OPENAI_API_KEY`, `GROK_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `AWS_REGION`) instead of CLI flags if you prefer. The script merges with any existing secret payload and stamps an `updatedAt` timestamp.
 
 ### Manage smoke test credentials
 Store the Cognito smoke-test username/password in AWS Secrets Manager so CI and local testers can fetch them without hard-coding sensitive data. Replace `dev` with the desired environment name.

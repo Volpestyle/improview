@@ -4,7 +4,6 @@ import { Duration, Stack, StackProps, CfnOutput, RemovalPolicy } from 'aws-cdk-l
 import { Construct } from 'constructs';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
-import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import { HttpApi, HttpMethod, CorsHttpMethod } from 'aws-cdk-lib/aws-apigatewayv2';
@@ -51,14 +50,6 @@ export class BackendStack extends Stack {
       projectionType: dynamodb.ProjectionType.ALL,
     });
 
-    const artifactsBucket = new s3.Bucket(this, 'ArtifactsBucket', {
-      encryption: s3.BucketEncryption.S3_MANAGED,
-      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
-      enforceSSL: true,
-      autoDeleteObjects: isDev,
-      removalPolicy,
-    });
-
     const apiHandler = new lambda.Function(this, 'ApiHandler', {
       runtime: lambda.Runtime.PROVIDED_AL2023,
       architecture: lambda.Architecture.ARM_64,
@@ -68,7 +59,6 @@ export class BackendStack extends Stack {
       environment: {
         ENV_NAME: envName,
         TABLE_NAME: mainTable.tableName,
-        ARTIFACT_BUCKET: artifactsBucket.bucketName,
         PROVIDER_SECRET_ARN: props.providerSecret?.secretArn ?? '',
         USER_POOL_ID: props.userPool?.userPoolId ?? '',
         USER_POOL_CLIENT_ID: props.userPoolClient?.userPoolClientId ?? '',
@@ -106,7 +96,6 @@ export class BackendStack extends Stack {
     });
 
     mainTable.grantReadWriteData(apiHandler);
-    artifactsBucket.grantReadWrite(apiHandler);
     props.providerSecret?.grantRead(apiHandler);
 
     const corsOrigins = props.allowedOrigins ?? [
@@ -159,11 +148,6 @@ export class BackendStack extends Stack {
     new CfnOutput(this, 'UserActivityIndexName', {
       value: 'gsi2',
       description: 'DynamoDB GSI for user scoped saved-problem activity feeds',
-    });
-
-    new CfnOutput(this, 'ArtifactsBucketName', {
-      value: artifactsBucket.bucketName,
-      description: 'Bucket used to store grading artifacts and traces',
     });
   }
 }

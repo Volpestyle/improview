@@ -38,6 +38,9 @@ async function main() {
   const secretId = args["secret-id"] || `improview/${envName}/providers`;
   const openaiApiKey = args.openai || process.env.OPENAI_API_KEY;
   const grokApiKey = args.grok || process.env.GROK_API_KEY;
+  const anthropicApiKey =
+    args.anthropic || process.env.ANTHROPIC_API_KEY || args.claude;
+  const googleApiKey = args.google || process.env.GOOGLE_API_KEY;
 
   const client = new SecretsManagerClient({ region });
 
@@ -68,6 +71,14 @@ async function main() {
 
   if (grokApiKey) {
     nextSecret.grokApiKey = grokApiKey;
+  }
+
+  if (anthropicApiKey) {
+    nextSecret.anthropicApiKey = anthropicApiKey;
+  }
+
+  if (googleApiKey) {
+    nextSecret.googleApiKey = googleApiKey;
   }
 
   nextSecret.updatedAt = new Date().toISOString();
