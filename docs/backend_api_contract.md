@@ -27,6 +27,7 @@ Create a new problem pack and persist it.
 Include the header `Authorization: Bearer <access_token>` for authenticated calls.
 
 **Request body**
+
 ```json
 {
   "category": "arrays",
@@ -42,14 +43,16 @@ Include the header `Authorization: Bearer <access_token>` for authenticated call
 }
 ```
 
-- `category` *(string, required)* — Requested topic category.
-- `difficulty` *(string, required)* — Difficulty label (e.g. `easy`, `medium`).
-- `mode` *(string, optional)* — Choose between `"static"` (default) and `"llm"`. When omitted the backend uses its configured default.
-- `customPrompt` *(string, optional)* — Custom problem description prompt.
-- `provider` *(string, optional)* — Downstream model/provider hint recorded with the request.
-- `llm` *(object, optional)* — Per-request overrides for `model`, `baseUrl`, and `provider` when `mode` is `llm`.
+- `category` _(string, required)_ — Requested topic category.
+- `difficulty` _(string, required)_ — Difficulty label (e.g. `easy`, `medium`).
+- `mode` _(string, optional)_ — Choose between `"static"` (default) and `"llm"`. When omitted the backend uses its configured default.
+- `customPrompt` _(string, optional)_ — Custom problem description prompt.
+- `provider` _(string, optional)_ — Downstream model/provider hint recorded with the request.
+- `llm` _(object, optional)_ — Per-request overrides for `model`, `baseUrl`, and `provider` when `mode` is `llm`. The backend always calls OpenAI's Responses API (`POST /v1/responses`) for these requests.
+- `llm` _(object, optional)_ — Per-request overrides for `model`, `baseUrl`, and `provider` when `mode` is `llm`. Supported `provider` values are `openai`, `anthropic`, `grok`, and `google`; when omitted the backend uses its configured default. Each provider routes to its native API (OpenAI Responses, Anthropic Messages, xAI Chat Completions, or Google Generative Language respectively).
 
 **Response body**
+
 ```json
 {
   "problem_id": "prob_123",
@@ -58,39 +61,76 @@ Include the header `Authorization: Bearer <access_token>` for authenticated call
       "title": "...",
       "statement": "...",
       "constraints": ["..."],
-      "examples": [
-        {"input": ["..."], "output": "...", "explanation": "..."}
-      ],
+      "examples": [{ "input": ["..."], "output": "...", "explanation": "..." }],
       "edge_cases": ["..."]
     },
     "api": {
       "function_name": "solve",
       "signature": "def solve(nums: List[int]) -> int",
-      "params": [{"name": "nums", "type": "List[int]", "desc": "..."}],
-      "returns": {"type": "int", "desc": "..."}
+      "params": [{ "name": "nums", "type": "List[int]", "desc": "..." }],
+      "returns": { "type": "int", "desc": "..." }
     },
     "time_estimate_minutes": 20,
     "hint": "...",
     "solutions": [
       {
         "approach": "...",
-        "complexity": {"time": "O(n)", "space": "O(1)"},
+        "complexity": { "time": "O(n)", "space": "O(1)" },
         "code": "..."
       }
     ],
+    "reference_solutions": [
+      {
+        "kind": "baseline",
+        "language": "javascript",
+        "code": "function solve(nums, target) { /* brute force */ }",
+        "notes": "O(n^2) double loop to contrast with the optimal solution."
+      },
+      {
+        "kind": "optimal",
+        "language": "javascript",
+        "code": "function solve(nums, target) { /* hash map */ }"
+      }
+    ],
     "tests": {
-      "public": [{"input": ["..."], "output": "..."}],
-      "hidden": [{"input": ["..."], "output": "..."}]
+      "public": [{ "input": ["..."], "output": "..." }],
+      "hidden": [{ "input": ["..."], "output": "..." }]
+    },
+    "macro_category": "dsa",
+    "workspace_template": {
+      "entry": "src/index.ts",
+      "files": {
+        "src/index.ts": {
+          "code": "export function shortestIslands(grid) {\n  // ...\n}\n"
+        },
+        "src/runner.js": {
+          "code": "import { shortestIslands } from './index.js';\n// glue code\n",
+          "hidden": true
+        }
+      },
+      "dependencies": {
+        "typescript": "^5.4.0"
+      },
+      "dev_dependencies": {
+        "vitest": "^1.5.0"
+      }
     }
   }
 }
 ```
+
+`pack.macro_category` communicates the coarse problem type (`dsa`, `frontend`, or `system-design`). Clients can use it to pick the correct IDE chrome or code runner.
+
+`pack.reference_solutions` contains executable JS implementations labeled as `baseline`, `optimal`, or `alt_optimal`. They are guaranteed to match the declared `api.signature` and power automated smoke tests as well as the “reference solution” UI after submission.
+
+`pack.workspace_template` is optional. When present it describes the starter workspace: `entry` is the file opened by default, `files` is a map keyed by POSIX-style relative paths whose values include the file `code` (string) and an optional `hidden` flag. The template can also carry optional `dependencies`, `dev_dependencies`, `template`, and `environment` metadata for bootstrapping frameworks.
 
 ### POST /api/attempt
 
 Create an attempt record for a user starting to solve a problem.
 
 **Request body**
+
 ```json
 {
   "problem_id": "prob_123",
@@ -98,11 +138,12 @@ Create an attempt record for a user starting to solve a problem.
 }
 ```
 
-- `problem_id` *(string, required)* — Identifier from `/api/generate`.
-- `lang` *(string, required)* — Language code for the solution attempt.
+- `problem_id` _(string, required)_ — Identifier from `/api/generate`.
+- `lang` _(string, required)_ — Language code for the solution attempt.
 - Caller identity is inferred from the bearer token supplied on the request.
 
 **Response body**
+
 ```json
 {
   "attempt": {
@@ -125,6 +166,7 @@ Create an attempt record for a user starting to solve a problem.
 Execute code for a given attempt against public/hidden tests.
 
 **Request body**
+
 ```json
 {
   "attempt_id": "att_456",
@@ -133,11 +175,12 @@ Execute code for a given attempt against public/hidden tests.
 }
 ```
 
-- `attempt_id` *(string, required)* — Attempt identifier.
-- `code` *(string, required)* — User-submitted code bundle.
-- `which` *(string, required)* — Test selection (e.g. `public`, `hidden`).
+- `attempt_id` _(string, required)_ — Attempt identifier.
+- `code` _(string, required)_ — User-submitted code bundle.
+- `which` _(string, required)_ — Test selection (e.g. `public`, `hidden`).
 
 **Response body**
+
 ```json
 {
   "summary": {
@@ -160,6 +203,7 @@ Execute code for a given attempt against public/hidden tests.
 Finalize an attempt, run full evaluation, and persist summary metrics.
 
 **Request body**
+
 ```json
 {
   "attempt_id": "att_456",
@@ -167,10 +211,11 @@ Finalize an attempt, run full evaluation, and persist summary metrics.
 }
 ```
 
-- `attempt_id` *(string, required)* — Attempt identifier.
-- `code` *(string, required)* — Final submitted solution.
+- `attempt_id` _(string, required)_ — Attempt identifier.
+- `code` _(string, required)_ — Final submitted solution.
 
 **Response body**
+
 ```json
 {
   "summary": {
@@ -196,6 +241,7 @@ Finalize an attempt, run full evaluation, and persist summary metrics.
 Fetch attempt metadata and recorded run history.
 
 **Response body**
+
 ```json
 {
   "attempt": {
@@ -227,14 +273,28 @@ Fetch attempt metadata and recorded run history.
 Retrieve a previously generated problem pack.
 
 **Response body**
+
 ```json
 {
   "problem": { "title": "...", "statement": "...", "constraints": ["..."], "examples": [] },
-  "api": { "function_name": "solve", "signature": "...", "params": [], "returns": {"type": "...", "desc": "..."} },
+  "api": {
+    "function_name": "solve",
+    "signature": "...",
+    "params": [],
+    "returns": { "type": "...", "desc": "..." }
+  },
   "time_estimate_minutes": 20,
   "hint": "...",
   "solutions": [],
-  "tests": {"public": [], "hidden": []}
+  "tests": { "public": [], "hidden": [] },
+  "macro_category": "frontend",
+  "workspace_template": {
+    "entry": "src/App.tsx",
+    "files": {
+      "src/App.tsx": { "code": "export default function App() { return <div>Hi</div>; }\n" },
+      "src/index.css": { "code": "body { background: #020617; }\n", "hidden": false }
+    }
+  }
 }
 ```
 
@@ -243,6 +303,7 @@ Retrieve a previously generated problem pack.
 Perform a health check. Returns `200` when healthy; otherwise error envelope.
 
 **Response body**
+
 ```json
 { "status": "ok" }
 ```
@@ -252,15 +313,44 @@ Perform a health check. Returns `200` when healthy; otherwise error envelope.
 Report the backend version string.
 
 **Response body**
+
 ```json
 { "version": "v0.1.0" }
 ```
+
+### GET /api/models
+
+Return the normalized llmhub model inventory for every configured provider. The endpoint remains unauthenticated and mirrors the `/provider-models` handler from llmhub.
+
+If llmhub is not configured on the backend the route responds with `501 Not Implemented`.
+
+**Response body**
+```json
+[
+  {
+    "id": "gpt-4o-mini",
+    "displayName": "GPT-4o Mini",
+    "provider": "openai",
+    "capabilities": {
+      "text": true,
+      "vision": true,
+      "tool_use": true,
+      "structured_output": true,
+      "reasoning": false
+    },
+    "contextWindow": 128000,
+    "tokenPrices": { "input": 0.15, "output": 0.6 }
+  }
+]
+```
+
 
 ### GET /api/user/profile
 
 Fetch the authenticated user's profile.
 
 **Response body**
+
 ```json
 {
   "profile": {
@@ -285,6 +375,7 @@ Fetch the authenticated user's profile.
 Create or update the authenticated user's profile. Empty or missing fields leave existing values unchanged.
 
 **Request body**
+
 ```json
 {
   "handle": "jvolpe",
@@ -300,6 +391,7 @@ Create or update the authenticated user's profile. Empty or missing fields leave
 ```
 
 **Response body**
+
 ```json
 {
   "profile": {
@@ -324,6 +416,7 @@ Create or update the authenticated user's profile. Empty or missing fields leave
 List saved problems for the authenticated user. Supports optional query params: `status` (`in_progress`, `completed`, `archived`), `limit` (defaults to 50, max 200), and `next_token` (cursor for pagination).
 
 **Response body**
+
 ```json
 {
   "saved_problems": [
@@ -348,6 +441,7 @@ List saved problems for the authenticated user. Supports optional query params: 
 Persist a problem to the user's library.
 
 **Request body**
+
 ```json
 {
   "problem_id": "prob_123",
@@ -361,6 +455,7 @@ Persist a problem to the user's library.
 ```
 
 **Response body**
+
 ```json
 {
   "saved_problem": {
@@ -383,6 +478,7 @@ Persist a problem to the user's library.
 Fetch full metadata for a saved problem, including attempt history.
 
 **Response body**
+
 ```json
 {
   "saved_problem": {
@@ -425,6 +521,7 @@ Fetch full metadata for a saved problem, including attempt history.
 Update saved problem metadata (notes, tags, status, or whether hints are unlocked).
 
 **Request body**
+
 ```json
 {
   "status": "completed",
@@ -435,6 +532,7 @@ Update saved problem metadata (notes, tags, status, or whether hints are unlocke
 ```
 
 **Response body**
+
 ```json
 {
   "saved_problem": {
@@ -468,6 +566,7 @@ Remove a problem from the user's saved list. Returns `204 No Content` on success
 Append a new attempt snapshot (including source code) to a saved problem.
 
 **Request body**
+
 ```json
 {
   "attempt_id": "att_1001",
@@ -481,6 +580,7 @@ Append a new attempt snapshot (including source code) to a saved problem.
 ```
 
 **Response body**
+
 ```json
 {
   "attempt": {
@@ -500,6 +600,7 @@ Append a new attempt snapshot (including source code) to a saved problem.
 List attempt snapshots for a saved problem (ordered newest first).
 
 **Response body**
+
 ```json
 {
   "attempts": [
@@ -543,7 +644,7 @@ List attempt snapshots for a saved problem (ordered newest first).
 - Global secondary indexes provide alternative lookups:
   - `gsi1` maps natural identifiers (`gsi1pk = ATTEMPT#<attempt_id>` or `gsi1pk = PROBLEM#<problem_id>#USER#<user_id>`) to their parent `saved_problem_id`.
   - `gsi2` (added in this revision) maps the user to attempt/activity feed (`gsi2pk = USER#<user_id>#ATTEMPT`, `gsi2sk = <iso8601_ts>#<saved_problem_id>#<attempt_id>`).
-- Saved problem attempts retain source code directly when the payload stays under the 400 KB DynamoDB item limit; larger submissions are uploaded to S3 (`ARTIFACT_BUCKET`) and referenced via `code_s3_key`.
+- Saved problem attempts must keep the `code` payload under ~300 KB so DynamoDB items remain below the 400 KB limit. Requests that exceed this limit return `400 bad_request` with an explanatory message.
 - All items carry `created_at` and `updated_at` Unix millisecond timestamps to support ordering and optimistic concurrency checks.
 - Only final submissions are recorded; interim “run tests” executions remain in-memory on the client.
 

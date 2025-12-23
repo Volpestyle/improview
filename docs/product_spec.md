@@ -23,7 +23,7 @@ Non‑goals (initial): discussion forums, company‑specific problem sets, multi
 2) Core Requirements
 
 2.1 Features
-	•	Problem generation: category + difficulty + optional custom prompt → LLM returns structured JSON (problem, constraints, examples, time estimate, hint, solution outlines, unit tests). Allow JavaScript or TypeScript annotations in signatures/solutions (`number[]`, etc.).
+	•	Problem generation: category + difficulty + optional custom prompt → LLM returns structured JSON (problem, constraints, examples, time estimate, hint, solution outlines, unit tests). Allow JavaScript or TypeScript annotations in signatures/solutions (`number[]`, etc.). Every pack also includes a `macro_category` (`dsa`, `frontend`, or `system-design`) and, when applicable, a `workspace_template` describing the starter files (entry path, ≤10 files, optional dependency manifests) the IDE should mount.
 	•	Editor: Zed‑inspired minimal UI, Vim keybindings, IntelliSense, inline errors, split view for statement ↔ code. Dark mode (Anysphere Dark theme) only at launch; editor can toggle to Gruvbox Soft preview mode for readability comparison.
 	•	Timer: auto‑starts from the LLM’s recommended duration; pause/resume; submit auto‑stops.
 	•	Testing: run public tests on demand; hidden tests run on submission. Deterministic, resource‑capped runner with per‑test stdout/stderr capture.
@@ -135,11 +135,16 @@ Provide:
 - hint: short, actionable
 - tests: public[] and hidden[] with deterministic inputs and expected outputs
 - solutions: 1-2 idiomatic approaches with Big-O
+- reference_solutions: executable JS for `"baseline"`, `"optimal"`, and (when it teaches something new) `"alt_optimal"` variants; each entry must include `{kind, language, code, notes?}`
+- macro_category: "dsa", "frontend", or "system-design" so the UI can pick the right workspace chrome
+- workspace_template (optional): entry file + files map (≤10 entries) sized for the requested framework/styling
 Rules:
 - Keep tests minimal but comprehensive; avoid randomness.
 - No external libs; pure functions only.
 - Ensure tests align with the signature exactly.
 - Prefer BFS/DFS/Two-Pointers/etc as per category.
+- Every reference_solutions[].code must be valid, standalone JavaScript (ES2022) that matches the declared signature and can run on Node 20 without additional dependencies.
+- If workspace_template is present, ensure the entry path exists in files, filenames are POSIX-style (e.g. `src/index.ts`), and only include the `hidden` flag when a starter file should be concealed.
 
 5.2 JSON Schema (Zod/TypeScript)
 
@@ -147,6 +152,27 @@ const Example = z.object({
   input: z.array(z.unknown()),
   output: z.unknown(),
   explanation: z.string().optional()
+});
+
+const WorkspaceFile = z.object({
+  code: z.string(),
+  hidden: z.boolean().optional()
+});
+
+const WorkspaceTemplate = z.object({
+  entry: z.string(),
+  files: z.record(WorkspaceFile),
+  dependencies: z.record(z.string()).optional(),
+  dev_dependencies: z.record(z.string()).optional(),
+  template: z.string().optional(),
+  environment: z.string().optional()
+});
+
+const ReferenceSolution = z.object({
+  kind: z.enum(["baseline", "optimal", "alt_optimal"]),
+  language: z.string(),
+  code: z.string(),
+  notes: z.string().optional()
 });
 
 export const ProblemPack = z.object({
@@ -170,10 +196,13 @@ export const ProblemPack = z.object({
     complexity: z.object({ time: z.string(), space: z.string() }),
     code: z.string()
   })).min(1).max(2),
+  reference_solutions: z.array(ReferenceSolution).min(1),
   tests: z.object({
     public: z.array(Example),
     hidden: z.array(Example)
-  })
+  }),
+  macro_category: z.enum(["dsa", "frontend", "system-design"]),
+  workspace_template: WorkspaceTemplate.optional()
 });
 
 5.3 Provider Broker
@@ -210,13 +239,13 @@ Health/Observability
 7) Code Execution & Safety (AWS)
 
 7.1 JS/TS Runner (Phase 1 on Lambda)
-	•	Lambda (Node 20) executes user code inside a sandboxed VM (e.g., vm2) with:
+		•	Lambda (Node 20) executes user code inside a sandboxed VM (e.g., vm2) with:
 	•	Hard timeouts per test (e.g., 150ms) and overall Lambda timeout (e.g., 3s public runs, 5s submit).
 	•	Memory limit via Lambda size (128–256MB) + guardrails in harness.
 	•	No network: runner Lambda uses an explicit deny for outbound requests at code level; optional allowlist only for logging.
 	•	Test harness compiles user export to ES module, validates signature against schema, and runs deterministic vectors.
 	•	Capture stdout/stderr; return structured results.
-	•	Local dev stub (Go) simply marks submissions that include "fail" in source as failures; replace with real sandbox before beta.
+		•	Local dev uses the same sandbox contract via an embedded JS runtime (goja) so `/api/run-tests` behaves identically without needing browser execution.
 
 7.2 Python Runner (Phase 2)
 	•	Option A (simpler): Pyodide WASM inside Lambda (via @cloudflare/pyodide-style bundling adapted for Lambda layers).

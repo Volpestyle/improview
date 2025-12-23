@@ -165,6 +165,20 @@ paths:
                   - version
         default:
           $ref: '#/components/responses/ErrorResponse'
+  /api/models:
+    get:
+      summary: List normalized LLM models exposed by llmhub
+      responses:
+        '200':
+          description: Normalized model list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LLMHubModelList'
+        '501':
+          description: llmhub not configured on the backend
+        default:
+          $ref: '#/components/responses/ErrorResponse'
   /api/user/profile:
     get:
       summary: Get authenticated user profile
@@ -336,6 +350,17 @@ components:
           type: string
         provider:
           type: string
+        mode:
+          type: string
+          enum:
+            - static
+            - llm
+        frontendFramework:
+          type: string
+        styling:
+          type: string
+        llm:
+          $ref: '#/components/schemas/LLMRequestOptions'
       required:
         - category
         - difficulty
@@ -419,6 +444,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SolutionOutline'
+        reference_solutions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReferenceSolution'
+          description: Executable JavaScript implementations labeled as baseline/optimal/alt_optimal.
         tests:
           $ref: '#/components/schemas/TestSuite'
       required:
@@ -427,7 +457,27 @@ components:
         - time_estimate_minutes
         - hint
         - solutions
+        - reference_solutions
         - tests
+    ReferenceSolution:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum:
+            - baseline
+            - optimal
+            - alt_optimal
+        language:
+          type: string
+        code:
+          type: string
+        notes:
+          type: string
+      required:
+        - kind
+        - language
+        - code
     ProblemMetadata:
       type: object
       properties:
@@ -809,8 +859,7 @@ components:
               format: int64
             code:
               type: string
-            code_s3_key:
-              type: string
+              maxLength: 307200
           required:
             - runtime_ms
             - code
@@ -823,6 +872,58 @@ components:
             $ref: '#/components/schemas/AttemptSnapshot'
       required:
         - attempts
+    LLMHubModel:
+      type: object
+      properties:
+        id:
+          type: string
+        displayName:
+          type: string
+        provider:
+          type: string
+        family:
+          type: string
+        capabilities:
+          type: object
+          properties:
+            text:
+              type: boolean
+            vision:
+              type: boolean
+            tool_use:
+              type: boolean
+            structured_output:
+              type: boolean
+            reasoning:
+              type: boolean
+          required:
+            - text
+            - vision
+            - tool_use
+            - structured_output
+            - reasoning
+        contextWindow:
+          type: integer
+        tokenPrices:
+          type: object
+          properties:
+            input:
+              type: number
+            output:
+              type: number
+        deprecated:
+          type: boolean
+        inPreview:
+          type: boolean
+      required:
+        - id
+        - displayName
+        - provider
+        - capabilities
+    LLMHubModelList:
+      type: array
+      items:
+        $ref: '#/components/schemas/LLMHubModel'
     SavedProblemAttemptResponse:
       type: object
       properties:
@@ -882,6 +983,7 @@ components:
           type: string
         code:
           type: string
+          maxLength: 307200
         status:
           type: string
           enum:
@@ -901,8 +1003,6 @@ components:
           type: integer
           format: int64
           nullable: true
-        code_s3_key:
-          type: string
       required:
         - attempt_id
         - code
@@ -924,3 +1024,12 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
+    LLMRequestOptions:
+      type: object
+      properties:
+        provider:
+          type: string
+        model:
+          type: string
+        baseUrl:
+          type: string
