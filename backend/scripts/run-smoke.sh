@@ -20,6 +20,8 @@ Options:
   --client-id <id>         Cognito App Client ID (default: USER_POOL_CLIENT_ID or first entry in USER_POOL_CLIENT_IDS).
   --client-secret <value>  Cognito App Client secret (default: COGNITO_CLIENT_SECRET).
   --run <pattern>          go test -run pattern (default: Live).
+  --mode <static|llm>      Force generator mode for /api/generate smoke calls.
+  --llm-smoke              Shortcut: run only the generate smoke in LLM mode.
   --debug                  Enable verbose test logging and CI_SMOKE_DEBUG.
   --local                  Target a locally running backend; skips CloudFormation endpoint lookup.
   --no-auth                Disable Cognito credential lookup and token exchange.
@@ -43,6 +45,8 @@ SECRET_ID="${SMOKE_SECRET_ID:-}"
 CLIENT_ID="${SMOKE_CLIENT_ID:-${USER_POOL_CLIENT_ID:-}}"
 CLIENT_SECRET="${SMOKE_CLIENT_SECRET:-}"
 RUN_PATTERN="${SMOKE_RUN_PATTERN:-Live}"
+FORCE_MODE="${SMOKE_FORCE_MODE:-}"
+LLM_SMOKE=0
 DEBUG=0
 LOCAL_RUN=0
 NO_AUTH=0
@@ -56,9 +60,11 @@ improview_cli_register "--secret-id" "string" "SECRET_ID"
 improview_cli_register "--client-id" "string" "CLIENT_ID"
 improview_cli_register "--client-secret" "string" "CLIENT_SECRET"
 improview_cli_register "--run" "string" "RUN_PATTERN"
+improview_cli_register "--mode" "string" "FORCE_MODE"
 improview_cli_register "--debug" "bool" "DEBUG"
 improview_cli_register "--local" "bool" "LOCAL_RUN"
 improview_cli_register "--no-auth" "bool" "NO_AUTH"
+improview_cli_register "--llm-smoke" "bool" "LLM_SMOKE"
 improview_cli_register "--help" "bool" "SHOW_HELP"
 improview_cli_register "-h" "bool" "SHOW_HELP"
 
@@ -94,6 +100,26 @@ fi
 if [[ ${LOCAL_RUN} -eq 1 && -z "${BASE_URL}" ]]; then
   # Default to the local API gateway when running against a developer machine.
   BASE_URL="http://localhost:8080"
+fi
+
+if [[ -n "${FORCE_MODE}" ]]; then
+  FORCE_MODE="$(printf '%s' "${FORCE_MODE}" | tr '[:upper:]' '[:lower:]')"
+  case "${FORCE_MODE}" in
+    static|llm) ;;
+    *)
+      fatal "Invalid --mode value %q (expected static or llm)" "${FORCE_MODE}"
+      ;;
+  esac
+fi
+
+if [[ ${LLM_SMOKE} -eq 1 ]]; then
+	if [[ -z "${FORCE_MODE}" ]]; then
+		FORCE_MODE="llm"
+	fi
+	if [[ "${RUN_PATTERN}" == "Live" ]]; then
+		RUN_PATTERN="TestLiveGenerate"
+	fi
+	log_info "LLM smoke mode enabled: forcing mode=${FORCE_MODE}, run pattern=${RUN_PATTERN}"
 fi
 
 if [[ ${DEBUG} -eq 1 ]]; then
@@ -214,6 +240,7 @@ else
   log_info "Secret ID:          ${SECRET_ID}"
   log_info "Cognito client ID:  ${CLIENT_ID:-<auto>}"
 fi
+log_info "Generator mode:     ${FORCE_MODE:-<auto>}"
 
 if [[ ${LOCAL_RUN} -eq 1 ]]; then
   if [[ -z "${BASE_URL}" ]]; then
@@ -243,6 +270,26 @@ else
 fi
 
 if [[ ${NO_AUTH} -eq 0 ]]; then
+  if [[ -z "${CLIENT_ID}" ]]; then
+    STACK_NAME="Improview-${ENV_NAME}-Auth"
+    log_step "Resolving Cognito client ID from ${STACK_NAME}"
+    CLIENT_ID="$(aws cloudformation describe-stacks \
+      --region "${REGION}" \
+      --stack-name "${STACK_NAME}" \
+      --query 'Stacks[0].Outputs[?OutputKey==`UserPoolClientId`].OutputValue' \
+      --output text 2>/tmp/run_smoke_auth_lookup.log || true)"
+    if [[ -s /tmp/run_smoke_auth_lookup.log ]]; then
+      log_debug "CloudFormation output:"
+      while IFS= read -r line; do
+        log_debug "  ${line}"
+      done < /tmp/run_smoke_auth_lookup.log
+    fi
+    rm -f /tmp/run_smoke_auth_lookup.log
+    if [[ "${CLIENT_ID}" == "None" ]]; then
+      CLIENT_ID=""
+    fi
+  fi
+
   if [[ -z "${CLIENT_ID}" ]]; then
     fatal "Cognito client ID is required (set --client-id or USER_POOL_CLIENT_ID/USER_POOL_CLIENT_IDS)."
   fi
@@ -359,6 +406,11 @@ else
 fi
 
 export BASE_URL
+if [[ -n "${FORCE_MODE}" ]]; then
+  export IMPROVIEW_FORCE_GENERATE_MODE="${FORCE_MODE}"
+else
+  unset IMPROVIEW_FORCE_GENERATE_MODE 2>/dev/null || true
+fi
 
 GO_TEST_CMD=(go test)
 if [[ ${DEBUG} -eq 1 ]]; then
