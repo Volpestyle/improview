@@ -17,7 +17,8 @@ import {
   useState,
   useEffect,
   type ReactNode,
-  type CSSProperties,
+  type Ref,
+  type KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
 import {
   SandpackProvider,
@@ -26,7 +27,11 @@ import {
   SandpackConsole,
   SandpackFileExplorer,
   useSandpack,
+  type CodeEditorRef,
 } from '@codesandbox/sandpack-react';
+import { Compartment } from '@codemirror/state';
+import type { Extension } from '@codemirror/state';
+import { vim } from '@replit/codemirror-vim';
 import type {
   SandpackFile,
   SandpackFiles,
@@ -94,7 +99,7 @@ const FALLBACK_SANDBOX_THEME = createSandpackThemeFromTokens(FALLBACK_TOKENS, 'l
 
 const DEFAULT_RESULTS_HEIGHT = 240;
 const MIN_RESULTS_HEIGHT = 160;
-const MIN_EDITOR_HEIGHT = 200;
+// const MIN_EDITOR_HEIGHT = 200;
 const RESIZE_HANDLE_HEIGHT = 12;
 const COLLAPSE_THRESHOLD = 16;
 
@@ -385,6 +390,8 @@ export interface CodeEditorPanelProps {
   showFileExplorer?: boolean;
   showSandpackConsole?: boolean;
   showReset?: boolean;
+  vimMode?: boolean;
+  editorExtensions?: Extension[];
 }
 
 export const CodeEditorPanel = ({
@@ -412,6 +419,8 @@ export const CodeEditorPanel = ({
   showFileExplorer = true,
   showSandpackConsole = true,
   showReset = true,
+  vimMode = false,
+  editorExtensions,
 }: CodeEditorPanelProps) => {
   const resolvedLanguage = resolveLanguage(language, fileName);
   const mainFilePath = ensureLeadingSlash(fileName);
@@ -447,6 +456,7 @@ export const CodeEditorPanel = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [resetCounter, setResetCounter] = useState(0);
   const [resultsHeight, setResultsHeight] = useState(0);
+  const [isMacPlatform, setIsMacPlatform] = useState(false);
   const lastExpandedHeightRef = useRef(DEFAULT_RESULTS_HEIGHT);
   const resizeStateRef = useRef<{
     pointerId: number;
@@ -455,6 +465,42 @@ export const CodeEditorPanel = ({
     releasePointerCapture?: () => void;
   } | null>(null);
   const editorBodyRef = useRef<HTMLDivElement>(null);
+  const codeMirrorRef = useRef<CodeEditorRef | null>(null);
+  const vimCompartmentRef = useRef<Compartment | null>(null);
+  const vimBaseExtension = useMemo<Extension>(() => {
+    const compartment = new Compartment();
+    vimCompartmentRef.current = compartment;
+    return compartment.of([]);
+  }, []);
+  const applyVimModeToEditor = useCallback(() => {
+    const getter = codeMirrorRef.current?.getCodemirror;
+    const compartment = vimCompartmentRef.current;
+    if (typeof getter !== 'function' || !compartment) {
+      return;
+    }
+    const view = getter();
+    if (!view) {
+      return;
+    }
+    const extension: Extension = vimMode ? vim() : [];
+    view.dispatch({
+      effects: compartment.reconfigure(extension),
+    });
+  }, [vimMode]);
+  useEffect(() => {
+    applyVimModeToEditor();
+  }, [applyVimModeToEditor]);
+  const handleCodeMirrorRef = useCallback(
+    (instance: CodeEditorRef | null) => {
+      if (instance && typeof instance.getCodemirror === 'function') {
+        codeMirrorRef.current = instance;
+        applyVimModeToEditor();
+      } else {
+        codeMirrorRef.current = null;
+      }
+    },
+    [applyVimModeToEditor],
+  );
 
   const code = isControlled ? (value ?? '') : internalCode;
   const effectiveResults = results ?? internalResults;
@@ -491,6 +537,48 @@ export const CodeEditorPanel = ({
   );
 
   const resolvedSandpackTheme = sandpackTheme ?? computedSandpackTheme ?? FALLBACK_SANDBOX_THEME;
+  const runShortcutLabel = isMacPlatform ? "⌘+'" : "Ctrl+'";
+  const submitShortcutLabel = isMacPlatform ? '⌘+Enter' : 'Ctrl+Enter';
+  useEffect(() => {
+    if (typeof navigator === 'undefined') {
+      return;
+    }
+    setIsMacPlatform(/Mac|iPhone|iPad|iPod/i.test(navigator.platform));
+  }, []);
+
+  const computedEditorExtensions = useMemo<Extension[]>(() => {
+    const list: Extension[] = [];
+    if (Array.isArray(editorExtensions) && editorExtensions.length > 0) {
+      list.push(...editorExtensions);
+    }
+    list.push(vimBaseExtension);
+    return list;
+  }, [editorExtensions, vimBaseExtension]);
+
+  const focusCodeMirror = useCallback(() => {
+    const getter = codeMirrorRef.current?.getCodemirror;
+    if (typeof getter !== 'function') {
+      return;
+    }
+    const view = getter();
+    view?.focus();
+  }, []);
+
+  const handleEditorKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (!vimMode || event.key !== 'Escape') {
+        return;
+      }
+      const target = event.target as HTMLElement | null;
+      if (!target?.closest('.cm-editor')) {
+        return;
+      }
+      event.stopPropagation();
+      event.preventDefault();
+      requestAnimationFrame(focusCodeMirror);
+    },
+    [focusCodeMirror, vimMode],
+  );
 
   const providerOptions = useMemo(() => {
     const base: SandpackOptions = {
@@ -563,6 +651,55 @@ export const CodeEditorPanel = ({
     }
   }, [code, onSubmit, setResults]);
 
+  useEffect(() => {
+    if (!onRunTests && !onSubmit) {
+      return;
+    }
+    const handleShortcuts = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const insideEditor = !!target?.closest('.cm-editor');
+      const tagName = target?.tagName?.toLowerCase();
+      if (!insideEditor && tagName && ['input', 'textarea', 'select'].includes(tagName)) {
+        return;
+      }
+      if (target?.isContentEditable && !insideEditor) {
+        return;
+      }
+      const modifierPressed = event.metaKey || (!isMacPlatform && event.ctrlKey);
+      if (!modifierPressed) {
+        return;
+      }
+      if (
+        event.key === '\'' &&
+        onRunTests &&
+        !isRunning &&
+        !isSubmitting &&
+        !readOnly
+      ) {
+        event.preventDefault();
+        handleRunTests();
+        return;
+      }
+      if (event.key === 'Enter' && onSubmit && !isRunning && !isSubmitting) {
+        event.preventDefault();
+        handleSubmit();
+      }
+    };
+    window.addEventListener('keydown', handleShortcuts);
+    return () => {
+      window.removeEventListener('keydown', handleShortcuts);
+    };
+  }, [
+    handleRunTests,
+    handleSubmit,
+    isMacPlatform,
+    isRunning,
+    isSubmitting,
+    onRunTests,
+    onSubmit,
+    readOnly,
+  ]);
+
   const consoleOutput = useMemo(() => {
     if (!effectiveResults) return [];
     return effectiveResults.flatMap((result) => {
@@ -634,7 +771,7 @@ export const CodeEditorPanel = ({
       };
       event.currentTarget.setPointerCapture(event.pointerId);
     },
-    [showOutput, resultsHeight, clampResultsHeight],
+    [resultsHeight, clampResultsHeight],
   );
 
   const handleResizePointerMove = useCallback(
@@ -799,18 +936,18 @@ export const CodeEditorPanel = ({
       />
       <div
         className={cn(
-          'flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border-subtle bg-[var(--editor-background)]',
+          'flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-lg border border-border-subtle bg-[var(--editor-background)]',
           className,
         )}
       >
-        <div className="flex items-center justify-between border-b border-border-subtle bg-bg-panel px-4 py-2">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-2 border-b border-border-subtle bg-bg-panel px-4 py-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             {toolbarStart}
             <span className="text-sm font-medium text-fg-muted">
               {getFileDisplayName(mainFilePath)}
             </span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
             {actions}
             {showReset ? (
               <Button
@@ -832,6 +969,7 @@ export const CodeEditorPanel = ({
               onClick={handleRunTests}
               disabled={!onRunTests || isRunning || isSubmitting || !!readOnly}
               className="gap-2"
+              title={`Run tests (${runShortcutLabel})`}
             >
               {isRunning ? (
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -846,6 +984,7 @@ export const CodeEditorPanel = ({
               onClick={handleSubmit}
               disabled={!onSubmit || isRunning || isSubmitting}
               className="gap-2"
+              title={`Submit (${submitShortcutLabel})`}
             >
               {isSubmitting ? (
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -856,15 +995,19 @@ export const CodeEditorPanel = ({
             </Button>
           </div>
         </div>
-        <div
-          ref={editorBodyRef}
-          className="relative flex h-full flex-1 min-h-0 flex-col overflow-hidden"
-        >
+      <div
+        ref={editorBodyRef}
+        onKeyDown={handleEditorKeyDown}
+        role="presentation"
+        className="relative flex h-full flex-1 min-h-0 flex-col overflow-hidden"
+      >
           <SandpackPanel
             showFileExplorer={showFileExplorer}
             showPreview={showPreview}
             showSandpackConsole={showSandpackConsole}
             readOnly={!!readOnly}
+            editorExtensions={computedEditorExtensions}
+            editorRef={handleCodeMirrorRef}
           />
 
           <>
@@ -937,12 +1080,17 @@ export const CodeEditorPanel = ({
                       <div className="space-y-3 p-4">
                         {errorMessage ? (
                           <div className="flex items-start gap-2 rounded-lg border border-danger-600/30 bg-danger-soft/20 p-3 text-danger-600">
-                            <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden="true" />
+                            <AlertCircle
+                              className="mt-0.5 h-4 w-4 flex-shrink-0"
+                              aria-hidden="true"
+                            />
                             <p className="text-sm">{errorMessage}</p>
                           </div>
                         ) : effectiveResults && effectiveResults.length > 0 ? (
                           effectiveResults.map((result, index) => (
-                            <Fragment key={result.id ?? index}>{renderResult(result, index)}</Fragment>
+                            <Fragment key={result.id ?? index}>
+                              {renderResult(result, index)}
+                            </Fragment>
                           ))
                         ) : (
                           <p className="text-center text-sm text-fg-muted">
@@ -993,6 +1141,8 @@ interface SandpackPanelProps {
   showFileExplorer: boolean;
   showSandpackConsole: boolean;
   readOnly: boolean;
+  editorExtensions?: Extension[];
+  editorRef?: Ref<CodeEditorRef>;
 }
 
 const SandpackPanel = ({
@@ -1000,6 +1150,8 @@ const SandpackPanel = ({
   showFileExplorer,
   showSandpackConsole,
   readOnly,
+  editorExtensions,
+  editorRef,
 }: SandpackPanelProps) => {
   return (
     <div className="flex h-full flex-1 min-h-0 flex-col overflow-hidden">
@@ -1023,6 +1175,7 @@ const SandpackPanel = ({
             style={{ height: '100%' }}
           >
             <SandpackCodeEditor
+              ref={editorRef}
               className="flex-1 h-full bg-[var(--editor-background)] text-sm"
               style={{ height: '100%' }}
               showTabs
@@ -1030,6 +1183,7 @@ const SandpackPanel = ({
               showInlineErrors
               wrapContent
               readOnly={readOnly}
+              extensions={editorExtensions}
             />
           </div>
           {showPreview ? (

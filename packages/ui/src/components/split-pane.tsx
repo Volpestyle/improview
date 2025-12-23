@@ -10,6 +10,8 @@ interface SplitPaneProps {
   className?: string;
 }
 
+const HANDLE_WIDTH_PX = 16;
+
 export const SplitPane = ({
   left,
   right,
@@ -62,6 +64,19 @@ export const SplitPane = ({
     [clampFraction],
   );
 
+  const handleKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLButtonElement>) => {
+      if (!containerRef.current) return;
+      const bounds = containerRef.current.getBoundingClientRect();
+      const step = Math.max(1 / Math.max(bounds.width, 1), 0.005) * 24; // ~24px step
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        event.preventDefault();
+        setFraction((prev) => clampFraction(prev + (event.key === 'ArrowRight' ? step : -step)));
+      }
+    },
+    [clampFraction],
+  );
+
   const handlePointerUp = useCallback((event: PointerEvent) => {
     if (!dragging.current) return;
     dragging.current = false;
@@ -97,13 +112,11 @@ export const SplitPane = ({
   }, [clampFraction]);
 
   const leftStyle: React.CSSProperties = {
-    width: `${fraction * 100}%`,
-    minWidth: minLeft,
+    width: `calc(${fraction * 100}% - ${fraction * HANDLE_WIDTH_PX}px)`,
   };
 
   const rightStyle: React.CSSProperties = {
-    width: `${(1 - fraction) * 100}%`,
-    minWidth: minRight,
+    width: `calc(${(1 - fraction) * 100}% - ${(1 - fraction) * HANDLE_WIDTH_PX}px)`,
   };
 
   return (
@@ -118,14 +131,16 @@ export const SplitPane = ({
         role="separator"
         aria-orientation="vertical"
         aria-hidden="true"
-        className="group relative flex h-full w-4 flex-none select-none items-center justify-center border-l border-border-subtle bg-bg-panel"
+        className="group relative flex h-full flex-none select-none items-center justify-center border-l border-border-subtle bg-bg-panel"
+        style={{ width: `${HANDLE_WIDTH_PX}px` }}
       >
         <button
           type="button"
-          tabIndex={-1}
-          aria-hidden="true"
+          tabIndex={0}
+          aria-label="Resize panel"
           className="flex h-full w-full cursor-col-resize select-none items-center justify-center bg-transparent outline-none transition-colors"
           onPointerDown={handlePointerDown}
+          onKeyDown={handleKeyDown}
         >
           <span className="pointer-events-none h-16 w-[2px] rounded-full bg-border-default transition-colors group-hover:bg-border-focus" />
         </button>
