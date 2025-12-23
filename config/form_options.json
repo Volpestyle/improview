@@ -1,0 +1,51 @@
+{
+  "macroCategories": [
+    { "value": "dsa", "label": "DSA", "description": "Data Structures & Algorithms" },
+    { "value": "frontend", "label": "Frontend", "description": "UI/UX & Web Development" },
+    {
+      "value": "system-design",
+      "label": "System Design",
+      "description": "Architecture & Scalability"
+    }
+  ],
+  "dsaCategories": [
+    { "value": "arrays", "label": "Arrays" },
+    { "value": "bfs-dfs", "label": "BFS/DFS" },
+    { "value": "maps-sets", "label": "Maps/Sets" },
+    { "value": "dp", "label": "Dynamic Programming" },
+    { "value": "graphs", "label": "Graphs" },
+    { "value": "strings", "label": "Strings" },
+    { "value": "math", "label": "Math" },
+    { "value": "heaps", "label": "Heaps" },
+    { "value": "two-pointers", "label": "Two Pointers" }
+  ],
+  "frontendCategories": [
+    { "value": "react-components", "label": "React Components" },
+    { "value": "css-layouts", "label": "CSS Layouts" },
+    { "value": "accessibility", "label": "Accessibility" },
+    { "value": "state-management", "label": "State Management" },
+    { "value": "performance", "label": "Performance" },
+    { "value": "forms-validation", "label": "Forms & Validation" }
+  ],
+  "systemDesignCategories": [
+    { "value": "scalability", "label": "Scalability" },
+    { "value": "databases", "label": "Databases" },
+    { "value": "caching", "label": "Caching" },
+    { "value": "load-balancing", "label": "Load Balancing" },
+    { "value": "microservices", "label": "Microservices" },
+    { "value": "api-design", "label": "API Design" }
+  ],
+  "difficulties": [
+    { "value": "easy", "label": "Easy" },
+    { "value": "medium", "label": "Medium" },
+    { "value": "hard", "label": "Hard" }
+  ],
+  "frontendFrameworks": [
+    { "value": "React", "label": "React" },
+    { "value": "Vanilla JS", "label": "Vanilla JS" }
+  ],
+  "stylingOptions": [
+    { "value": "Tailwind CSS", "label": "Tailwind CSS" },
+    { "value": "Vanilla CSS", "label": "Vanilla CSS" }
+  ]
+}

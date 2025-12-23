@@ -1,11 +1,12 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "baseUrl": "./src",
+    "baseUrl": ".",
     "paths": {
-      "@app/*": ["*"],
+      "@app/*": ["src/*"],
       "@improview/ui": ["../../packages/ui/src/index.ts"],
-      "@improview/ui/*": ["../../packages/ui/src/*"]
+      "@improview/ui/*": ["../../packages/ui/src/*"],
+      "@llmhub/*": ["../../../llmhub/packages/node/src/*"]
     },
     "types": ["vitest/globals"]
   },

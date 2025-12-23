@@ -1,5 +1,10 @@
 # Build caches
 backend/.gocache/
+backend/.gomodcache/
+backend/.cache/
+
+# Temporary files
+tmp_schema_dump.go
 
 # Node/PNPM artifacts
 node_modules/
