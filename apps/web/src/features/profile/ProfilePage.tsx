@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import type React from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import {
   Avatar,
@@ -18,6 +19,7 @@ import {
 } from '@improview/ui';
 import { BookMarked, Calendar, Clock, Flame, Mail, Target, TrendingUp } from 'lucide-react';
 import { mockUser, mockUserPreferences, mockUserStats } from '../../data/mockUser';
+import { providerOptions } from '../../constants/providers';
 import { BreadcrumbsNav } from '../../components/BreadcrumbsNav';
 import type { UserPreferences } from '../../types/stats';
 
@@ -62,7 +64,10 @@ export function ProfilePage() {
   const stats = useMemo(() => mockUserStats, []);
   const user = useMemo(() => mockUser, []);
 
-  const handlePreferenceChange = <K extends keyof UserPreferences>(key: K, value: UserPreferences[K]) => {
+  const handlePreferenceChange = <K extends keyof UserPreferences>(
+    key: K,
+    value: UserPreferences[K],
+  ) => {
     setPreferences((prev) => ({ ...prev, [key]: value }));
     // TODO: Persist preference via API
   };
@@ -104,7 +109,10 @@ export function ProfilePage() {
             </Avatar>
             <div className="flex-1 space-y-2">
               <h1>{user.name ?? 'Improview member'}</h1>
-              <div className="flex flex-wrap items-center gap-4 text-sm" style={{ color: 'var(--fg-muted)' }}>
+              <div
+                className="flex flex-wrap items-center gap-4 text-sm"
+                style={{ color: 'var(--fg-muted)' }}
+              >
                 {user.email ? (
                   <span className="flex items-center gap-1">
                     <Mail className="h-4 w-4" aria-hidden="true" />
@@ -161,7 +169,9 @@ export function ProfilePage() {
           <Card>
             <CardHeader>
               <CardTitle>Difficulty breakdown</CardTitle>
-              <CardDescription>Balance your practice across easy, medium, and hard sets.</CardDescription>
+              <CardDescription>
+                Balance your practice across easy, medium, and hard sets.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-3">
@@ -202,7 +212,7 @@ export function ProfilePage() {
               >
                 <Select
                   value={preferences.theme}
-                  onChange={(event) =>
+                  onChange={(event: React.ChangeEvent<HTMLSelectElement>) =>
                     handlePreferenceChange('theme', event.target.value as UserPreferences['theme'])
                   }
                   options={[
@@ -219,16 +229,13 @@ export function ProfilePage() {
               >
                 <Select
                   value={preferences.default_provider}
-                  onChange={(event) =>
+                  onChange={(event: React.ChangeEvent<HTMLSelectElement>) =>
                     handlePreferenceChange(
                       'default_provider',
                       event.target.value as UserPreferences['default_provider'],
                     )
                   }
-                  options={[
-                    { label: 'OpenAI', value: 'openai' },
-                    { label: 'Grok', value: 'grok' },
-                  ]}
+                  options={providerOptions}
                 />
               </PreferenceRow>
 
@@ -334,7 +341,12 @@ interface PreferenceToggleProps {
   onCheckedChange: (value: boolean) => void;
 }
 
-const PreferenceToggle = ({ label, description, checked, onCheckedChange }: PreferenceToggleProps) => (
+const PreferenceToggle = ({
+  label,
+  description,
+  checked,
+  onCheckedChange,
+}: PreferenceToggleProps) => (
   <div className="flex items-start justify-between gap-4">
     <div className="flex-1 space-y-1">
       <Label>{label}</Label>

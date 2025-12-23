@@ -23,6 +23,8 @@ import {
     SavedAttemptSnapshotSchema,
     SavedProblemDetail,
     SavedProblemDetailSchema,
+    LLMHubModelsResponse,
+    LLMHubModelsSchema,
 } from '../types/api';
 import { ProblemPack, ProblemPackSchema, RunResult } from '../types/problem';
 
@@ -179,5 +181,13 @@ export class RestClient {
         return {
             attempt: SavedAttemptSnapshotSchema.parse(response.attempt),
         };
+    }
+
+    /**
+     * Retrieve the provider/model catalog.
+     */
+    public async getModelCatalog(): Promise<LLMHubModelsResponse> {
+        const response = await this.apiService.get<unknown>('/api/models');
+        return LLMHubModelsSchema.parse(response);
     }
 }

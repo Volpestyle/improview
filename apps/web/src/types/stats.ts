@@ -1,3 +1,4 @@
+import { Provider } from '@llmhub/core/types';
 import { z } from 'zod';
 
 export const DifficultyBreakdownSchema = z.object({
@@ -39,7 +40,7 @@ export const UserStatsSchema = z.object({
 
 export const UserPreferencesSchema = z.object({
   theme: z.enum(['light', 'dark', 'system']),
-  default_provider: z.enum(['openai', 'grok']),
+  default_provider: z.nativeEnum(Provider),
   show_hints_by_default: z.boolean(),
   auto_save_code: z.boolean(),
   vim_mode: z.boolean(),

@@ -146,6 +146,19 @@ export function usePersistedState<T>(
     return [value, setValue];
 }
 
+export function useIsMac(): boolean {
+    const [isMac, setIsMac] = useState(false);
+
+    useEffect(() => {
+        if (typeof navigator === 'undefined') {
+            return;
+        }
+        setIsMac(/Mac|iPhone|iPad|iPod/i.test(navigator.platform));
+    }, []);
+
+    return isMac;
+}
+
 /**
  * Hook to track elapsed time
  */

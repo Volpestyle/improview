@@ -10,6 +10,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  Select,
   Textarea,
   ThemeToggle,
   useToast,
@@ -21,7 +22,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAuthStore } from '../../state/authStore';
 import { getApiClient } from '../../lib/apiClient';
 import { getAuthService } from '../../lib/auth';
-import { useSaveProblem } from '../../lib/hooks';
+import { useSaveProblem, usePersistedState, useIsMac, useTestExecution } from '../../lib/hooks';
+import { Provider } from '@llmhub/core/types';
 import {
   MacroCategory,
   Category,
@@ -29,75 +31,62 @@ import {
   FrontendCategory,
   SystemDesignCategory,
   Difficulty,
-  Provider,
   ProblemPack,
   Attempt,
+  RunResult,
 } from '../../types/problem';
 import { WorkspaceSplitView } from '../../components/WorkspaceSplitView';
 import { Timer } from '../../components/Timer';
 import { getSandboxConfigForCategory } from '../../utils/sandboxConfig';
 import { deriveWorkspaceConfig } from '../../utils/workspaceTemplate';
+import type { LLMHubModelsResponse } from '../../types/api';
+import { providerLabels, supportedProviders, type ProviderCatalogEntry } from '../../constants/providers';
+import {
+  macroCategories,
+  dsaCategories,
+  frontendCategories,
+  systemDesignCategories,
+  difficulties,
+  frontendFrameworks,
+  stylingOptions,
+  getDefaultCategoryForMacro,
+} from '../../constants/formOptions';
 
-const macroCategories: {
-  value: MacroCategory;
-  label: string;
-  description: string;
-}[] = [
-  { value: 'dsa', label: 'DSA', description: 'Data Structures & Algorithms' },
-  { value: 'frontend', label: 'Frontend', description: 'UI/UX & Web Development' },
-  { value: 'system-design', label: 'System Design', description: 'Architecture & Scalability' },
-];
+type FormOptionsJSON = {
+  macroCategories: { value: MacroCategory; label: string; description: string }[];
+  dsaCategories: { value: DsaCategory; label: string }[];
+  frontendCategories: { value: FrontendCategory; label: string }[];
+  systemDesignCategories: { value: SystemDesignCategory; label: string }[];
+  difficulties: { value: Difficulty; label: string }[];
+  frontendFrameworks: { value: string; label: string }[];
+  stylingOptions: { value: string; label: string }[];
+};
 
-const dsaCategories: { value: DsaCategory; label: string }[] = [
-  { value: 'arrays', label: 'Arrays' },
-  { value: 'bfs-dfs', label: 'BFS/DFS' },
-  { value: 'maps-sets', label: 'Maps/Sets' },
-  { value: 'dp', label: 'Dynamic Programming' },
-  { value: 'graphs', label: 'Graphs' },
-  { value: 'strings', label: 'Strings' },
-  { value: 'math', label: 'Math' },
-  { value: 'heaps', label: 'Heaps' },
-  { value: 'two-pointers', label: 'Two Pointers' },
-];
-
-const frontendCategories: { value: FrontendCategory; label: string }[] = [
-  { value: 'react-components', label: 'React Components' },
-  { value: 'css-layouts', label: 'CSS Layouts' },
-  { value: 'accessibility', label: 'Accessibility' },
-  { value: 'state-management', label: 'State Management' },
-  { value: 'performance', label: 'Performance' },
-  { value: 'forms-validation', label: 'Forms & Validation' },
-];
-
-const systemDesignCategories: { value: SystemDesignCategory; label: string }[] = [
-  { value: 'scalability', label: 'Scalability' },
-  { value: 'databases', label: 'Databases' },
-  { value: 'caching', label: 'Caching' },
-  { value: 'load-balancing', label: 'Load Balancing' },
-  { value: 'microservices', label: 'Microservices' },
-  { value: 'api-design', label: 'API Design' },
-];
-
-const difficulties: { value: Difficulty; label: string }[] = [
-  { value: 'easy', label: 'Easy' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'hard', label: 'Hard' },
-];
-
-const providers: { value: Provider; label: string }[] = [
-  { value: 'openai', label: 'OpenAI' },
-  { value: 'grok', label: 'Grok 4 Fast' },
-];
-
-const frontendFrameworks = [
-  { value: 'React', label: 'React' },
-  { value: 'Vanilla JS', label: 'Vanilla JS' },
-] as const;
-
-const stylingOptions = [
-  { value: 'Tailwind CSS', label: 'Tailwind CSS' },
-  { value: 'Vanilla CSS', label: 'Vanilla CSS' },
-] as const;
+const normalizeCatalogResponse = (models: LLMHubModelsResponse): ProviderCatalogEntry[] => {
+  if (!models?.length) {
+    return [];
+  }
+  const grouped = new Map<Provider, ProviderCatalogEntry['models']>();
+  models.forEach((model) => {
+    const provider = model.provider;
+    if (!grouped.has(provider)) {
+      grouped.set(provider, []);
+    }
+    grouped.get(provider)!.push({ value: model.id, label: model.displayName });
+  });
+  return supportedProviders.reduce<ProviderCatalogEntry[]>((acc, provider) => {
+    const entries = grouped.get(provider);
+    if (!entries?.length) {
+      return acc;
+    }
+    acc.push({
+      provider,
+      displayName: providerLabels[provider],
+      models: entries,
+    });
+    return acc;
+  }, []);
+};
 
 export function HomePage() {
   const navigate = useNavigate();
@@ -108,13 +97,13 @@ export function HomePage() {
   const [selectedMacroCategory, setSelectedMacroCategory] = useState<MacroCategory>('dsa');
   const [selectedCategory, setSelectedCategory] = useState<Category>('bfs-dfs');
   const [selectedDifficulty, setSelectedDifficulty] = useState<Difficulty>('medium');
-  const [selectedProvider, setSelectedProvider] = useState<Provider>('openai');
-  const [selectedFramework, setSelectedFramework] = useState<(typeof frontendFrameworks)[number]['value']>(
-    'React',
-  );
-  const [selectedStyling, setSelectedStyling] = useState<(typeof stylingOptions)[number]['value']>(
-    'Tailwind CSS',
-  );
+  const [catalogEntries, setCatalogEntries] = useState<ProviderCatalogEntry[]>([]);
+  const [selectedProvider, setSelectedProvider] = useState<Provider>(Provider.OpenAI);
+  const [selectedModel, setSelectedModel] = useState<string>('');
+  const [selectedFramework, setSelectedFramework] =
+    useState<(typeof frontendFrameworks)[number]['value']>('React');
+  const [selectedStyling, setSelectedStyling] =
+    useState<(typeof stylingOptions)[number]['value']>('Tailwind CSS');
   const [customPrompt, setCustomPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [currentProblem, setCurrentProblem] = useState<ProblemPack | null>(null);
@@ -122,6 +111,10 @@ export function HomePage() {
   const [isNavHidden, setIsNavHidden] = useState(false);
   const [lastScrollY, setLastScrollY] = useState(0);
   const [solutionCode, setSolutionCode] = useState('');
+  const [vimMode, setVimMode] = usePersistedState<boolean>('editor:vimMode', false);
+  const isMac = useIsMac();
+  const vimShortcutLabel = isMac ? '⌘⇧M' : 'Ctrl+Shift+M';
+  const vimShortcutAria = isMac ? 'Meta+Shift+M' : 'Control+Shift+M';
 
   // Use React Query mutation for saving problems
   const {
@@ -133,6 +126,7 @@ export function HomePage() {
 
   const workspaceRef = useRef<HTMLDivElement>(null);
   const workspaceHeaderRef = useRef<HTMLDivElement>(null);
+  const { runTestsAsync } = useTestExecution();
 
   // Scroll detection for nav bar hiding/showing
   useEffect(() => {
@@ -184,15 +178,82 @@ export function HomePage() {
     };
   }, []);
 
+  useEffect(() => {
+    const handleVimHotkey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const insideEditor = !!target?.closest('.cm-editor');
+      const tagName = target?.tagName?.toLowerCase();
+      if (!insideEditor && tagName && ['input', 'textarea', 'select'].includes(tagName)) {
+        return;
+      }
+      if (target?.isContentEditable && !insideEditor) {
+        return;
+      }
+      const modifierPressed = isMac ? event.metaKey : event.ctrlKey;
+      if (!modifierPressed || !event.shiftKey) {
+        return;
+      }
+      if (event.key.toLowerCase() !== 'm') {
+        return;
+      }
+      event.preventDefault();
+      setVimMode((prev) => !prev);
+    };
+
+    window.addEventListener('keydown', handleVimHotkey);
+    return () => {
+      window.removeEventListener('keydown', handleVimHotkey);
+    };
+  }, [isMac, setVimMode]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const apiClient = getApiClient();
+
+    const loadCatalog = async () => {
+      try {
+        const response = await apiClient.getModelCatalog();
+        if (cancelled) {
+          return;
+        }
+        setCatalogEntries(normalizeCatalogResponse(response));
+      } catch (error) {
+        console.error('Failed to load model catalog', error);
+      }
+    };
+
+    loadCatalog();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (catalogEntries.length === 0) {
+      return;
+    }
+
+    const entry = catalogEntries.find((catalogEntry) => catalogEntry.provider === selectedProvider);
+    if (!entry) {
+      const fallback = catalogEntries[0];
+      if (fallback && fallback.provider !== selectedProvider) {
+        setSelectedProvider(fallback.provider);
+        setSelectedModel(fallback.models[0]?.value ?? '');
+      }
+      return;
+    }
+
+    if (entry.models.length > 0 && !entry.models.some((model) => model.value === selectedModel)) {
+      const nextModel = entry.models[0]?.value ?? '';
+      if (nextModel && nextModel !== selectedModel) {
+        setSelectedModel(nextModel);
+      }
+    }
+  }, [catalogEntries, selectedProvider, selectedModel]);
+
   const handleMacroCategoryChange = (macro: MacroCategory) => {
     setSelectedMacroCategory(macro);
-    if (macro === 'dsa') {
-      setSelectedCategory('bfs-dfs' as Category);
-    } else if (macro === 'frontend') {
-      setSelectedCategory('react-components' as Category);
-    } else {
-      setSelectedCategory('scalability' as Category);
-    }
+    setSelectedCategory(getDefaultCategoryForMacro(macro));
   };
 
   const activeMacroCategory = useMemo<MacroCategory>(
@@ -213,6 +274,12 @@ export function HomePage() {
   const editorFileName = workspaceConfig?.fileName ?? 'solution.js';
   const editorLanguage = workspaceConfig?.language ?? 'javascript';
   const defaultEditorCode = workspaceConfig?.initialCode ?? '';
+  const providerOptions = catalogEntries.map((entry) => ({
+    value: entry.provider,
+    label: entry.displayName,
+  }));
+  const currentProviderEntry = catalogEntries.find((entry) => entry.provider === selectedProvider);
+  const modelOptions = currentProviderEntry?.models ?? [];
 
   useEffect(() => {
     if (!currentProblem) {
@@ -225,10 +292,30 @@ export function HomePage() {
     resetSaveMutation();
   }, [currentProblem, defaultEditorCode, resetSaveMutation]);
 
+  const handleProviderSelect = (providerValue: Provider) => {
+    if (providerValue === selectedProvider) {
+      return;
+    }
+    setSelectedProvider(providerValue);
+    const entry = catalogEntries.find((catalogEntry) => catalogEntry.provider === providerValue);
+    if (entry && entry.models.length > 0) {
+      setSelectedModel(entry.models[0].value);
+    } else {
+      setSelectedModel('');
+    }
+  };
+
   const handleGenerate = async () => {
     setIsGenerating(true);
     try {
       const apiClient = getApiClient();
+      const llmOverrides =
+        selectedModel || selectedProvider
+          ? {
+              provider: selectedProvider,
+              model: selectedModel || undefined,
+            }
+          : undefined;
 
       // Generate problem
       const generateResponse = await apiClient.generate({
@@ -236,13 +323,13 @@ export function HomePage() {
         difficulty: selectedDifficulty,
         customPrompt: customPrompt || undefined,
         provider: selectedProvider,
-        frontendFramework:
-          selectedMacroCategory === 'frontend' ? selectedFramework : undefined,
+        frontendFramework: selectedMacroCategory === 'frontend' ? selectedFramework : undefined,
         styling: selectedMacroCategory === 'frontend' ? selectedStyling : undefined,
         mode:
           import.meta.env.VITE_API_MODE === 'static' || import.meta.env.VITE_API_MODE === 'llm'
             ? (import.meta.env.VITE_API_MODE as 'static' | 'llm')
             : undefined,
+        llm: llmOverrides,
       });
 
       // Fetch the full problem data
@@ -292,37 +379,98 @@ export function HomePage() {
     navigate({ to: '/profile' });
   };
 
-  // Mock test execution (same as in figma-make-reference)
-  const handleRunTests = async (code: string): Promise<EditorTestResult[]> => {
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    if (!currentProblem) return [];
+  const mapStatusToEditor = (status: string): EditorTestResult['status'] => {
+    if (status === 'pass' || status === 'fail') {
+      return status;
+    }
+    return 'error';
+  };
 
-    return currentProblem.tests.public.map((test, idx) => ({
-      id: `test_${idx}`,
-      status: code.includes('return') ? 'pass' : 'fail',
-      timeMs: Math.floor(Math.random() * 50) + 5,
-      expected: test.output,
-      actual: code.includes('return') ? test.output : null,
-    }));
+  const mapRunResultToEditor = (result: RunResult): EditorTestResult => ({
+    id: result.test_id,
+    status: mapStatusToEditor(result.status),
+    timeMs: Number(result.time_ms),
+    stdout: result.stdout,
+    stderr: result.stderr,
+    message: result.status === 'timeout' || result.status === 'error' ? result.status : undefined,
+  });
+
+  const handleRunTests = async (code: string): Promise<EditorTestResult[]> => {
+    if (!currentAttempt) {
+      const error = new Error('No attempt available for test execution.');
+      publish({
+        title: 'Run unavailable',
+        description: 'Generate a problem and start an attempt before running tests.',
+        variant: 'error',
+      });
+      throw error;
+    }
+
+    try {
+      const response = await runTestsAsync({
+        attempt_id: currentAttempt.id,
+        code,
+        which: 'public',
+      });
+
+      return response.summary.results.map(mapRunResultToEditor);
+    } catch (error) {
+      console.error('Test execution failed:', error);
+      publish({
+        title: 'Test execution failed',
+        description: error instanceof Error ? error.message : 'An unknown error occurred',
+        variant: 'error',
+      });
+      throw error instanceof Error ? error : new Error('Test execution failed');
+    }
   };
 
   const handleSubmit = async (code: string): Promise<SubmitResult> => {
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    if (!currentProblem) return { passed: false, results: [] };
+    if (!currentAttempt) {
+      const error = new Error('No attempt available for submission.');
+      publish({
+        title: 'Submission unavailable',
+        description: 'Generate a problem and start an attempt before submitting.',
+        variant: 'error',
+      });
+      throw error;
+    }
 
-    const allTests = [...currentProblem.tests.public, ...currentProblem.tests.hidden];
-    const results = allTests.map((test, idx) => ({
-      id: `test_${idx}`,
-      status: (code.includes('return') && Math.random() > 0.3 ? 'pass' : 'fail') as 'pass' | 'fail',
-      timeMs: Math.floor(Math.random() * 50) + 5,
-      expected: test.output,
-      actual: code.includes('return') ? test.output : null,
-    }));
+    try {
+      const apiClient = getApiClient();
+      const response = await apiClient.submit({
+        attempt_id: currentAttempt.id,
+        code,
+      });
 
-    return {
-      passed: results.every((r) => r.status === 'pass'),
-      results,
-    };
+      const results = response.summary.hidden_results.map(mapRunResultToEditor);
+
+      publish({
+        title: response.summary.passed ? 'Submission passed!' : 'Submission failed',
+        description: response.summary.passed
+          ? 'All tests passed! View your results.'
+          : 'Some tests failed. Review your solution.',
+        variant: response.summary.passed ? 'success' : 'error',
+      });
+
+      navigate({
+        to: '/results/$attemptId',
+        params: { attemptId: currentAttempt.id },
+      });
+
+      return {
+        passed: response.summary.passed,
+        results,
+      };
+    } catch (error) {
+      console.error('Submission failed:', error);
+      publish({
+        title: 'Submission failed',
+        description: error instanceof Error ? error.message : 'An unknown error occurred',
+        variant: 'error',
+      });
+      throw error instanceof Error ? error : new Error('Submission failed');
+    }
   };
 
   const handleSaveProblem = async () => {
@@ -635,17 +783,30 @@ export function HomePage() {
               id="provider-group"
               aria-label="Select AI provider"
             >
-              {providers.map(({ value, label }) => (
+              {providerOptions.map(({ value, label }) => (
                 <Button
                   key={value}
                   variant="selectable"
-                  onClick={() => setSelectedProvider(value)}
+                  onClick={() => handleProviderSelect(value)}
                   aria-pressed={selectedProvider === value}
                 >
                   {label}
                 </Button>
               ))}
             </div>
+          </div>
+
+          <div className="space-y-3">
+            <Select
+              label="Model"
+              placeholder={modelOptions.length === 0 ? 'No models available' : undefined}
+              disabled={modelOptions.length === 0}
+              value={selectedModel}
+              onChange={(event: React.ChangeEvent<HTMLSelectElement>) =>
+                setSelectedModel(event.target.value)
+              }
+              options={modelOptions}
+            />
           </div>
 
           {/* Custom Prompt */}
@@ -660,7 +821,9 @@ export function HomePage() {
               id="custom-prompt"
               placeholder="e.g., Prefer grid graphs, include negative numbers, etc."
               value={customPrompt}
-              onChange={(e) => setCustomPrompt(e.target.value)}
+              onChange={(event: React.ChangeEvent<HTMLTextAreaElement>) =>
+                setCustomPrompt(event.target.value)
+              }
               className="resize-none h-24"
               aria-describedby="prompt-helper"
             />
@@ -795,7 +958,6 @@ export function HomePage() {
                 <WorkspaceSplitView
                   className="h-full"
                   problem={currentProblem}
-                  editorKey={currentProblem.problem.title}
                   minLeft={360}
                   minRight={360}
                   initialFraction={0.5}
@@ -817,6 +979,19 @@ export function HomePage() {
                     sandpackTemplate: workspaceConfig?.sandpackTemplate,
                     sandpackFiles: workspaceConfig?.sandpackFiles,
                     sandpackSetup: workspaceConfig?.sandpackSetup,
+                    actions: (
+                      <Button
+                        variant={vimMode ? 'primary' : 'outline'}
+                        size="sm"
+                        onClick={() => setVimMode((prev) => !prev)}
+                        aria-pressed={vimMode}
+                        title={`Toggle Vim mode (${vimShortcutLabel})`}
+                        aria-keyshortcuts={vimShortcutAria}
+                      >
+                        {vimMode ? 'Vim: On' : 'Vim: Off'}
+                      </Button>
+                    ),
+                    vimMode,
                   }}
                 />
               </div>

@@ -1,3 +1,4 @@
+import { Provider } from '@llmhub/core/types';
 import { AttemptHistory, ProblemList, SavedProblem, User } from '../types/user';
 import { UserPreferences, UserStats } from '../types/stats';
 
@@ -199,7 +200,7 @@ export const mockUserStats: UserStats = {
 
 export const mockUserPreferences: UserPreferences = {
   theme: 'dark',
-  default_provider: 'openai',
+  default_provider: Provider.OpenAI,
   show_hints_by_default: false,
   auto_save_code: true,
   vim_mode: false,

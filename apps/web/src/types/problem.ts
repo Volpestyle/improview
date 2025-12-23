@@ -47,6 +47,13 @@ export const SolutionOutlineSchema = z.object({
     code: z.string(),
 });
 
+export const ReferenceSolutionSchema = z.object({
+    kind: z.enum(['baseline', 'optimal', 'alt_optimal']),
+    language: z.string(),
+    code: z.string(),
+    notes: z.string().optional(),
+});
+
 export const TestSuiteSchema = z.object({
     public: z.array(ExampleSchema),
     hidden: z.array(ExampleSchema),
@@ -72,6 +79,7 @@ export const ProblemPackSchema = z.object({
     time_estimate_minutes: z.number(),
     hint: z.string(),
     solutions: z.array(SolutionOutlineSchema),
+    reference_solutions: z.array(ReferenceSolutionSchema).optional().default([]),
     tests: TestSuiteSchema,
     macro_category: z.enum(['dsa', 'frontend', 'system-design']),
     workspace_template: WorkspaceTemplateSchema.optional(),
@@ -109,6 +117,7 @@ export type APIParamReturn = z.infer<typeof APIParamReturnSchema>;
 export type APISignature = z.infer<typeof APISignatureSchema>;
 export type ProblemMetadata = z.infer<typeof ProblemMetadataSchema>;
 export type SolutionOutline = z.infer<typeof SolutionOutlineSchema>;
+export type ReferenceSolution = z.infer<typeof ReferenceSolutionSchema>;
 export type TestSuite = z.infer<typeof TestSuiteSchema>;
 export type ProblemPack = z.infer<typeof ProblemPackSchema>;
 export type WorkspaceTemplate = z.infer<typeof WorkspaceTemplateSchema>;
@@ -151,7 +160,6 @@ export type SystemDesignCategory =
 
 export type Category = DsaCategory | FrontendCategory | SystemDesignCategory;
 export type Difficulty = 'easy' | 'medium' | 'hard';
-export type Provider = 'openai' | 'grok';
 export type TestVisibility = 'public' | 'hidden';
 export type TestStatus = 'pass' | 'fail' | 'timeout' | 'error';
 

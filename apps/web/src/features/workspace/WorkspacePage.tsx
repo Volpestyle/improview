@@ -13,7 +13,7 @@ import { motion } from 'framer-motion';
 import { getApiClient } from '../../lib/apiClient';
 import { queryKeys } from '../../lib/queryClient';
 import { RunResult, MacroCategory } from '../../types/problem';
-import { useTestExecution, usePersistedState } from '../../lib/hooks';
+import { useTestExecution, usePersistedState, useIsMac } from '../../lib/hooks';
 import { getSandboxConfigForCategory } from '../../utils/sandboxConfig';
 import { deriveWorkspaceConfig } from '../../utils/workspaceTemplate';
 import { WorkspaceSplitView } from '../../components/WorkspaceSplitView';
@@ -60,6 +60,10 @@ export function WorkspacePage() {
   const editorLanguage = workspaceConfig?.language ?? 'javascript';
 
   const [code, setCode] = usePersistedState(`attempt:${attemptId}:code`, initialCode);
+  const [vimMode, setVimMode] = usePersistedState<boolean>('editor:vimMode', false);
+  const isMac = useIsMac();
+  const vimShortcutLabel = isMac ? '⌘⇧M' : 'Ctrl+Shift+M';
+  const vimShortcutAria = isMac ? 'Meta+Shift+M' : 'Control+Shift+M';
   useEffect(() => {
     if (!problem || !workspaceConfig) {
       return;
@@ -68,6 +72,33 @@ export function WorkspacePage() {
       setCode(workspaceConfig.initialCode);
     }
   }, [problem, workspaceConfig, code, setCode]);
+
+  useEffect(() => {
+    const handleVimHotkey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const insideEditor = !!target?.closest('.cm-editor');
+      const tagName = target?.tagName?.toLowerCase();
+      if (!insideEditor && tagName && ['input', 'textarea', 'select'].includes(tagName)) {
+        return;
+      }
+      if (target?.isContentEditable && !insideEditor) {
+        return;
+      }
+      const modifierPressed = isMac ? event.metaKey : event.ctrlKey;
+      if (!modifierPressed || !event.shiftKey) {
+        return;
+      }
+      if (event.key.toLowerCase() !== 'm') {
+        return;
+      }
+      event.preventDefault();
+      setVimMode((prev) => !prev);
+    };
+    window.addEventListener('keydown', handleVimHotkey);
+    return () => {
+      window.removeEventListener('keydown', handleVimHotkey);
+    };
+  }, [isMac, setVimMode]);
 
   const mapStatusToEditor = (status: string): EditorTestResult['status'] => {
     if (status === 'pass' || status === 'fail') {
@@ -186,6 +217,16 @@ export function WorkspacePage() {
         </div>
         <div className="flex items-center gap-2">
           <ThemeToggle />
+          <Button
+            variant={vimMode ? 'primary' : 'outline'}
+            size="sm"
+            onClick={() => setVimMode((prev) => !prev)}
+            aria-pressed={vimMode}
+            title={`Toggle Vim mode (${vimShortcutLabel})`}
+            aria-keyshortcuts={vimShortcutAria}
+          >
+            {vimMode ? 'Vim: On' : 'Vim: Off'}
+          </Button>
         </div>
       </motion.header>
 
@@ -193,7 +234,6 @@ export function WorkspacePage() {
       <main className="flex-1 min-h-0 overflow-hidden" role="main">
         <WorkspaceSplitView
           problem={problem}
-          editorKey={problem.problem.title}
           editorProps={{
             value: code,
             defaultValue: initialCode,
@@ -212,6 +252,19 @@ export function WorkspacePage() {
             sandpackTemplate: workspaceConfig?.sandpackTemplate,
             sandpackFiles: workspaceConfig?.sandpackFiles,
             sandpackSetup: workspaceConfig?.sandpackSetup,
+            actions: (
+              <Button
+                variant={vimMode ? 'primary' : 'outline'}
+                size="sm"
+                onClick={() => setVimMode((prev) => !prev)}
+                aria-pressed={vimMode}
+                title={`Toggle Vim mode (${vimShortcutLabel})`}
+                aria-keyshortcuts={vimShortcutAria}
+              >
+                {vimMode ? 'Vim: On' : 'Vim: Off'}
+              </Button>
+            ),
+            vimMode,
           }}
         />
       </main>
