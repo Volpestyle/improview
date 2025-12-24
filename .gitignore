@@ -3,6 +3,10 @@ backend/.gocache/
 backend/.gomodcache/
 backend/.cache/
 
+# Go workspace (local development)
+backend/go.work
+backend/go.work.sum
+
 # Temporary files
 tmp_schema_dump.go
 

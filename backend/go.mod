@@ -5,7 +5,7 @@ go 1.23
 toolchain go1.24.5
 
 require (
-	github.com/Volpestyle/llmhub v0.0.0
+	github.com/Volpestyle/llmhub v0.0.0-20251223183902-e2322d76f153
 	github.com/aws/aws-lambda-go v1.49.0
 	github.com/aws/aws-sdk-go-v2 v1.39.3
 	github.com/aws/aws-sdk-go-v2/config v1.31.12
@@ -37,5 +37,3 @@ require (
 	github.com/google/pprof v0.0.0-20230207041349-798e818bf904 // indirect
 	golang.org/x/text v0.14.0 // indirect
 )
-
-replace github.com/Volpestyle/llmhub => /Users/jamesvolpe/web/llmhub

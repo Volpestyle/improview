@@ -40,6 +40,9 @@ jobs:
         run: npm install -g aws-cdk@2
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Update llmhub dependency
+        run: make ci
+        working-directory: backend
       - name: Backend tests
         run: go test ./...
         working-directory: backend
