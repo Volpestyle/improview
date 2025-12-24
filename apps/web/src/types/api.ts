@@ -1,5 +1,5 @@
-import type { ModelMetadata } from '@llmhub/core/types';
-import { Provider } from '@llmhub/core/types';
+import type { ModelMetadata } from '@volpestyle/llmhub-node';
+import { Provider } from '@volpestyle/llmhub-node';
 import { z } from 'zod';
 import { ProblemPackSchema, AttemptSchema, RunResultSchema } from './problem';
 

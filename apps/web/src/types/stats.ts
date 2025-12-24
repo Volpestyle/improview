@@ -1,4 +1,4 @@
-import { Provider } from '@llmhub/core/types';
+import { Provider } from '@volpestyle/llmhub-node';
 import { z } from 'zod';
 
 export const DifficultyBreakdownSchema = z.object({

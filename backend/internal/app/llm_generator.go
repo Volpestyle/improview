@@ -279,20 +279,24 @@ type LLMProblemGenerator struct {
 
 // NewLLMProblemGenerator constructs an LLM-backed problem generator instance.
 func NewLLMProblemGenerator(opts LLMOptions) (*LLMProblemGenerator, error) {
-	keys := normalizeAPIKeys(opts.APIKey, opts.APIKeys)
-	if len(keys) == 0 {
+	openAIKeys := normalizeAPIKeys(opts.APIKey, opts.APIKeys)
+	if len(openAIKeys) == 0 && len(opts.AdditionalProviders) == 0 {
 		return nil, errors.New("llm generator: missing API key")
 	}
-	apiKey := keys[0]
 
-	base := normalizeProviderBase(defaultString(opts.BaseURL, defaultLLMBaseURL), "/v1")
-	if base == "" {
-		return nil, errors.New("llm generator: missing base URL")
-	}
-
-	model := strings.TrimSpace(defaultString(opts.Model, defaultLLMModel))
-	if model == "" {
-		return nil, errors.New("llm generator: missing model")
+	var apiKey string
+	var base string
+	var model string
+	if len(openAIKeys) > 0 {
+		apiKey = openAIKeys[0]
+		base = normalizeProviderBase(defaultString(opts.BaseURL, defaultLLMBaseURL), "/v1")
+		if base == "" {
+			return nil, errors.New("llm generator: missing base URL")
+		}
+		model = strings.TrimSpace(defaultString(opts.Model, defaultLLMModel))
+		if model == "" {
+			return nil, errors.New("llm generator: missing model")
+		}
 	}
 
 	timeout := opts.Timeout
@@ -314,20 +318,21 @@ func NewLLMProblemGenerator(opts LLMOptions) (*LLMProblemGenerator, error) {
 
 	hubCfg := llmhub.Config{
 		HTTPClient: client,
-		OpenAI: &llmhub.OpenAIConfig{
-			APIKey:              apiKey,
-			APIKeys:             keys,
-			BaseURL:             base,
-			DefaultUseResponses: true,
-		},
 	}
 
-	providers := map[llmhub.Provider]providerSettings{
-		llmhub.ProviderOpenAI: {
+	providers := map[llmhub.Provider]providerSettings{}
+	if len(openAIKeys) > 0 {
+		hubCfg.OpenAI = &llmhub.OpenAIConfig{
+			APIKey:              apiKey,
+			APIKeys:             openAIKeys,
+			BaseURL:             base,
+			DefaultUseResponses: true,
+		}
+		providers[llmhub.ProviderOpenAI] = providerSettings{
 			provider:     llmhub.ProviderOpenAI,
 			label:        defaultString(opts.Provider, "OpenAI"),
 			defaultModel: model,
-		},
+		}
 	}
 
 	for rawKey, cfg := range opts.AdditionalProviders {
@@ -379,6 +384,31 @@ func NewLLMProblemGenerator(opts LLMOptions) (*LLMProblemGenerator, error) {
 		}
 	}
 
+	if len(providers) == 0 {
+		return nil, errors.New("llm generator: no providers configured")
+	}
+
+	defaultProv := llmhub.ProviderOpenAI
+	if len(openAIKeys) == 0 {
+		defaultProv = ""
+		for _, candidate := range []llmhub.Provider{
+			llmhub.ProviderAnthropic,
+			llmhub.ProviderXAI,
+			llmhub.ProviderGoogle,
+		} {
+			if _, ok := providers[candidate]; ok {
+				defaultProv = candidate
+				break
+			}
+		}
+		if defaultProv == "" {
+			for provider := range providers {
+				defaultProv = provider
+				break
+			}
+		}
+	}
+
 	hub, err := llmhub.New(hubCfg)
 	if err != nil {
 		return nil, fmt.Errorf("llm generator: configure hub: %w", err)
@@ -390,7 +420,7 @@ func NewLLMProblemGenerator(opts LLMOptions) (*LLMProblemGenerator, error) {
 		hubConfig:   hubCfg,
 		hubFactory:  defaultHubFactory,
 		temperature: temperature,
-		defaultProv: llmhub.ProviderOpenAI,
+		defaultProv: defaultProv,
 		providers:   providers,
 	}, nil
 }

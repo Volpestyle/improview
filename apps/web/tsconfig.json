@@ -5,8 +5,7 @@
     "paths": {
       "@app/*": ["src/*"],
       "@improview/ui": ["../../packages/ui/src/index.ts"],
-      "@improview/ui/*": ["../../packages/ui/src/*"],
-      "@llmhub/*": ["../../../llmhub/packages/node/src/*"]
+      "@improview/ui/*": ["../../packages/ui/src/*"]
     },
     "types": ["vitest/globals"]
   },

@@ -7,8 +7,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@app': path.resolve(__dirname, './src'),
-      '@improview/ui': path.resolve(__dirname, '../../packages/ui/src'),
-      '@llmhub': path.resolve(__dirname, '../../../llmhub/packages/node/src')
+      '@improview/ui': path.resolve(__dirname, '../../packages/ui/src')
     }
   },
   css: {

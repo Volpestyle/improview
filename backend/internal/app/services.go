@@ -267,7 +267,7 @@ func newServices(clock api.Clock, options ServicesOptions) (api.Services, error)
 
 	var llmGenerator api.ProblemGenerator
 	var llmHubGenerator *LLMProblemGenerator
-	if len(normalizeAPIKeys(options.LLM.APIKey, options.LLM.APIKeys)) > 0 {
+	if len(normalizeAPIKeys(options.LLM.APIKey, options.LLM.APIKeys)) > 0 || len(options.LLM.AdditionalProviders) > 0 {
 		var err error
 		llmHubGenerator, err = NewLLMProblemGenerator(options.LLM)
 		if err != nil {
