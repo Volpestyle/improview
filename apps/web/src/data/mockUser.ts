@@ -1,4 +1,4 @@
-import { Provider } from '@volpestyle/llmhub-node';
+import { Provider } from '../types/llmhub';
 import { AttemptHistory, ProblemList, SavedProblem, User } from '../types/user';
 import { UserPreferences, UserStats } from '../types/stats';
 

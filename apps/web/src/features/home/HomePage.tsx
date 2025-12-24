@@ -23,7 +23,7 @@ import { useAuthStore } from '../../state/authStore';
 import { getApiClient } from '../../lib/apiClient';
 import { getAuthService } from '../../lib/auth';
 import { useSaveProblem, usePersistedState, useIsMac, useTestExecution } from '../../lib/hooks';
-import { Provider } from '@volpestyle/llmhub-node';
+import { Provider } from '../../types/llmhub';
 import {
   MacroCategory,
   Category,

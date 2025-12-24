@@ -1,4 +1,4 @@
-import { Provider } from '@volpestyle/llmhub-node';
+import { Provider } from './llmhub';
 import { z } from 'zod';
 
 export const DifficultyBreakdownSchema = z.object({
@@ -40,7 +40,12 @@ export const UserStatsSchema = z.object({
 
 export const UserPreferencesSchema = z.object({
   theme: z.enum(['light', 'dark', 'system']),
-  default_provider: z.nativeEnum(Provider),
+  default_provider: z.enum([
+    Provider.OpenAI,
+    Provider.Anthropic,
+    Provider.XAI,
+    Provider.Google,
+  ]),
   show_hints_by_default: z.boolean(),
   auto_save_code: z.boolean(),
   vim_mode: z.boolean(),

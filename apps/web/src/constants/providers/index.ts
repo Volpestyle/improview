@@ -1,4 +1,4 @@
-import { Provider } from '@volpestyle/llmhub-node';
+import { Provider } from '../../types/llmhub';
 
 export type ProviderModelOption = {
   value: string;

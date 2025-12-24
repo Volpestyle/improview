@@ -1,5 +1,5 @@
-import type { ModelMetadata } from '@volpestyle/llmhub-node';
-import { Provider } from '@volpestyle/llmhub-node';
+import type { ModelMetadata } from './llmhub';
+import { Provider } from './llmhub';
 import { z } from 'zod';
 import { ProblemPackSchema, AttemptSchema, RunResultSchema } from './problem';
 
@@ -50,7 +50,12 @@ export const SubmitRequestSchema = z.object({
   code: z.string(),
 });
 
-const ProviderSchema = z.nativeEnum(Provider);
+const ProviderSchema = z.enum([
+  Provider.OpenAI,
+  Provider.Anthropic,
+  Provider.XAI,
+  Provider.Google,
+]);
 const ModelCapabilitiesSchema = z.object({
   text: z.boolean(),
   vision: z.boolean(),
